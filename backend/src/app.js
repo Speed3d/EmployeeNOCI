@@ -1,0 +1,103 @@
+/**
+ * Hint: نقطة الانطلاق الرئيسية لخادم النظام (Express Server)
+ * يجمع كافة المسارات، يفعل حماية CORS، ويدمج نقاط الـ API مع استضافة الواجهة
+ */
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+
+const { PORT } = require('./core/config');
+const db = require('./core/database');
+
+// استيراد المسارات المقسمة حسب الميزات (Features)
+const authRoutes = require('./features/auth/authRoutes');
+const attendanceRoutes = require('./features/attendance/attendanceRoutes');
+const employeeRoutes = require('./features/employees/employeeRoutes');
+const leaveRoutes = require('./features/leaves/leaveRoutes');
+const settingRoutes = require('./features/settings/settingRoutes');
+const auditRoutes = require('./features/audit_logs/auditRoutes');
+const chatRoutes = require('./features/chat/chatRoutes');
+const reportRoutes = require('./features/reports/reportRoutes');
+
+const app = express();
+
+// تفعيل CORS للسماح بالاتصال من أي دومين أو محاكي أندرويد/آيفون أو متصفح ويب
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// 1. فحص صحة الخادم وحالته العامة (Health Check)
+app.get('/api/system/status', (req, res) => {
+  const settingsRows = db.prepare('SELECT key, value FROM system_settings').all();
+  const settings = {};
+  for (const s of settingsRows) settings[s.key] = s.value;
+
+  res.json({
+    success: true,
+    name: 'NOCI Attendance Intelligence API',
+    version: '1.0.0',
+    status: 'ONLINE',
+    activeYear: settings['active_year'] || '2026',
+    isMaintenance: settings['maintenance_mode'] === 'true',
+    announcementBanner: settings['announcement_banner_active'] === 'true' ? settings['announcement_banner_text'] : '',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 2. تسجيل مسارات الـ API المقسمة معمارياً
+app.use('/api/auth', authRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/leaves', leaveRoutes);
+app.use('/api/settings', settingRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/reports', reportRoutes);
+
+// 3. استضافة ملفات الويب المجمعة من Flutter إن وجدت
+const webBuildPath = path.join(__dirname, '../../app/build/web');
+if (fs.existsSync(webBuildPath)) {
+  app.use(express.static(webBuildPath));
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(webBuildPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.send(`
+      <div style="font-family: Cairo, Tahoma, sans-serif; direction: rtl; text-align: center; padding: 50px;">
+        <h1 style="color: #15315C;">🏛️ خادم نظام متابعة حضور وانصراف موظفي المقر (NOCI) يعمل بنجاح</h1>
+        <p style="color: #555;">الـ API جاهز لاستقبال الطلبات على <code>/api</code></p>
+      </div>
+    `);
+  });
+}
+
+// 4. معالج الأخطاء العام
+app.use((err, req, res, next) => {
+  console.error('خطأ غير معالج في الخادم:', err);
+  res.status(500).json({
+    success: false,
+    message: 'حدث خطأ داخلي في الخادم',
+    error: err.message
+  });
+});
+
+// تشغيل السيرفر
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`=======================================================`);
+    console.log(`✔ خادم NOCI Attendance يعمل الآن بنجاح على:`);
+    console.log(`  - محلياً: http://localhost:${PORT}`);
+    console.log(`  - رابط الصحة: http://localhost:${PORT}/api/system/status`);
+    console.log(`=======================================================`);
+  });
+}
+
+module.exports = app;
