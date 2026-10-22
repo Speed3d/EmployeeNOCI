@@ -1,9 +1,11 @@
 /**
- * Hint: متحكم إدارة الموظفين والأقسام واستثناءات الـ VIP
+ * Hint: متحكم إدارة الموظفين والأقسام واستثناءات الـ VIP ونقل الموظفين (الإصدار الثاني المعتمد)
  */
 const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
+const { parseMasterEmployeesFile } = require('../../tools/excelHelper');
+const { ROLES } = require('../../shared/constants');
 
 function listEmployees(req, res) {
   const { search, department, status, isExempt } = req.query;
@@ -59,10 +61,20 @@ function getEmployee(req, res) {
     ORDER BY start_date DESC
   `).all(id);
 
+  // جلب سجل تنقلات الموظف
+  const transfers = db.prepare(`
+    SELECT t.*, u.full_name as transferred_by_name
+    FROM employee_transfers t
+    LEFT JOIN users u ON u.id = t.transferred_by
+    WHERE t.employee_id = ?
+    ORDER BY t.created_at DESC
+  `).all(id);
+
   return successResponse(res, {
     employee: emp,
     recentAttendance,
-    leaves
+    leaves,
+    transfers
   });
 }
 
@@ -97,7 +109,6 @@ function createEmployee(req, res) {
     notes || ''
   );
 
-  // التأكد من تسجيل القسم في جدول الأقسام
   db.prepare('INSERT OR IGNORE INTO departments (name) VALUES (?)').run(department.trim());
 
   logAction(user.id, user.full_name, 'إضافة موظف جديد', `إضافة الموظف [${empCode}] ${name} في قسم ${department}`);
@@ -115,7 +126,6 @@ function updateEmployee(req, res) {
     return errorResponse(res, 'الموظف غير موجود', 404);
   }
 
-  // فحص عدم تكرار الكود مع موظف آخر
   if (empCode && empCode.trim() !== emp.emp_code) {
     const existing = db.prepare('SELECT id FROM employees WHERE emp_code = ? AND id != ?').get(empCode.trim(), id);
     if (existing) {
@@ -157,6 +167,61 @@ function updateEmployee(req, res) {
   return successResponse(res, null, 'تم تحديث بيانات الموظف بنجاح');
 }
 
+/**
+ * نقل موظف من قسم إلى آخر مع تسجيل ذلك في سجل التنقلات (النقطة 16)
+ */
+function transferEmployee(req, res) {
+  const { id } = req.params;
+  const { newDepartment, reason } = req.body;
+  const user = req.user;
+
+  if (!newDepartment || !newDepartment.trim()) {
+    return errorResponse(res, 'يرجى تحديد القسم الجديد المراد النقل إليه', 400);
+  }
+
+  const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+  if (!emp) {
+    return errorResponse(res, 'الموظف غير موجود', 404);
+  }
+
+  const fromDept = emp.department;
+  const toDept = newDepartment.trim();
+
+  if (fromDept === toDept) {
+    return errorResponse(res, 'الموظف موجود بالفعل في هذا القسم', 400);
+  }
+
+  // التأكد من وجود القسم الجديد في جدول الأقسام
+  db.prepare('INSERT OR IGNORE INTO departments (name) VALUES (?)').run(toDept);
+
+  // تحديث قسم الموظف وإضافة السجل في employee_transfers
+  const updateEmpStmt = db.prepare('UPDATE employees SET department = ? WHERE id = ?');
+  const insertTransferStmt = db.prepare(`
+    INSERT INTO employee_transfers (employee_id, from_department, to_department, transferred_by, reason)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const tx = db.transaction(() => {
+    updateEmpStmt.run(toDept, id);
+    insertTransferStmt.run(id, fromDept, toDept, user.id, reason || '');
+  });
+
+  tx();
+
+  logAction(
+    user.id,
+    user.full_name,
+    'نقل موظف بين الأقسام',
+    `نقل الموظف [${emp.emp_code}] ${emp.name} من [${fromDept}] إلى [${toDept}]` + (reason ? ` - السبب: ${reason}` : '')
+  );
+
+  return successResponse(res, {
+    employeeId: id,
+    fromDepartment: fromDept,
+    toDepartment: toDept
+  }, `تم نقل الموظف إلى قسم ${toDept} بنجاح وتسجيل النقل في الأرشيف`);
+}
+
 function deleteEmployee(req, res) {
   const { id } = req.params;
   const user = req.user;
@@ -173,7 +238,6 @@ function deleteEmployee(req, res) {
   return successResponse(res, null, 'تم حذف الموظف بنجاح');
 }
 
-// Hint: تفعيل أو إلغاء استثناء الـ VIP لموظف معين
 function toggleVipExempt(req, res) {
   const { id } = req.params;
   const { isExempt, reason } = req.body;
@@ -194,7 +258,6 @@ function toggleVipExempt(req, res) {
   return successResponse(res, { isExempt: newExemptVal, reason }, `تم ${actionText} بنجاح`);
 }
 
-// Hint: قائمة الأقسام مع حالة الاستبعاد
 function listDepartments(req, res) {
   const departments = db.prepare(`
     SELECT d.id, d.name, d.is_excluded, COUNT(e.id) as employee_count
@@ -207,11 +270,15 @@ function listDepartments(req, res) {
   return successResponse(res, departments);
 }
 
-// Hint: استبعاد أو تضمين قسم بالكامل في كشوفات البصمة
 function toggleDepartmentExclusion(req, res) {
   const { id } = req.params;
   const { isExcluded } = req.body;
   const user = req.user;
+
+  // فحص الصلاحية: سوبر أدمن أو من يملك صلاحية إدارة الاستثناءات
+  if (user.role !== ROLES.SUPER_ADMIN && user.can_manage_exclusions !== 1) {
+    return errorResponse(res, 'ليس لديك الصلاحية لتعديل استثناءات الأقسام', 403);
+  }
 
   const dept = db.prepare('SELECT * FROM departments WHERE id = ?').get(id);
   if (!dept) {
@@ -227,13 +294,60 @@ function toggleDepartmentExclusion(req, res) {
   return successResponse(res, { isExcluded: val }, `تم تحديث حالة استبعاد القسم بنجاح`);
 }
 
+/**
+ * استيراد وتحديث الموظفين من ملف إكسل شامل (حصري للسوبر أدمن)
+ */
+function importEmployeesExcel(req, res) {
+  const user = req.user;
+  const file = req.file;
+
+  if (!file) {
+    return errorResponse(res, 'يرجى اختيار ملف الإكسل للاستيراد', 400);
+  }
+
+  try {
+    const list = parseMasterEmployeesFile(file.buffer);
+
+    const upsertStmt = db.prepare(`
+      INSERT INTO employees (emp_code, name, department, status, is_exempt, exempt_reason)
+      VALUES (@empCode, @name, @department, @status, @isExempt, @exemptReason)
+      ON CONFLICT(emp_code) DO UPDATE SET
+        name = excluded.name,
+        department = excluded.department,
+        status = excluded.status,
+        is_exempt = excluded.is_exempt,
+        exempt_reason = excluded.exempt_reason
+    `);
+
+    const insertDeptStmt = db.prepare('INSERT OR IGNORE INTO departments (name) VALUES (?)');
+
+    const tx = db.transaction(() => {
+      for (const e of list) {
+        insertDeptStmt.run(e.department);
+        upsertStmt.run(e);
+      }
+    });
+
+    tx();
+
+    logAction(user.id, user.full_name, 'استيراد موظفين من إكسل', `استيراد/تحديث ${list.length} موظف من ملف [${file.originalname}]`);
+
+    return successResponse(res, { count: list.length }, `تم استيراد وتحديث ${list.length} موظف بنجاح`);
+  } catch (err) {
+    console.error('خطأ في استيراد ملف الموظفين:', err);
+    return errorResponse(res, `فشل في استيراد الملف: ${err.message}`, 500);
+  }
+}
+
 module.exports = {
   listEmployees,
   getEmployee,
   createEmployee,
   updateEmployee,
+  transferEmployee,
   deleteEmployee,
   toggleVipExempt,
   listDepartments,
-  toggleDepartmentExclusion
+  toggleDepartmentExclusion,
+  importEmployeesExcel
 };

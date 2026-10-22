@@ -1,5 +1,6 @@
 /**
- * Hint: متحكم إدارة الإجازات والأذونات والعطل الرسمية
+ * Hint: متحكم إدارة الإجازات والأذونات والعطل الرسمية (الإصدار الثاني المعتمد)
+ * يستبعد الأقسام غير المشمولة والموظفين المستثنين، ويربط العطل بحالة HOLIDAY
  */
 const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
@@ -7,13 +8,15 @@ const { successResponse, errorResponse } = require('../../shared/responseHelper'
 
 // 1. الإجازات
 function listLeaves(req, res) {
-  const { employeeId, year, month } = req.query;
+  const { employeeId, year, month, department } = req.query;
 
   let query = `
     SELECT l.*, e.emp_code, e.name as employee_name, e.department
     FROM leaves l
     JOIN employees e ON e.id = l.employee_id
-    WHERE 1=1
+    WHERE e.status = 'نشط' 
+      AND e.is_exempt = 0
+      AND e.department NOT IN (SELECT name FROM departments WHERE is_excluded = 1)
   `;
   const params = [];
 
@@ -22,7 +25,17 @@ function listLeaves(req, res) {
     params.push(employeeId);
   }
 
-  if (year) {
+  if (department) {
+    query += ' AND e.department = ?';
+    params.push(department);
+  }
+
+  if (year && month) {
+    const paddedMonth = String(month).padStart(2, '0');
+    const prefix = `${year}-${paddedMonth}-%`;
+    query += ' AND (l.start_date LIKE ? OR l.end_date LIKE ?)';
+    params.push(prefix, prefix);
+  } else if (year) {
     query += ' AND (l.start_date LIKE ? OR l.end_date LIKE ?)';
     params.push(`${year}%`, `${year}%`);
   }
@@ -142,10 +155,10 @@ function createHoliday(req, res) {
 
   const result = stmt.run(date, title.trim(), holidayYear);
 
-  // تحديث سجلات الحضور لهذا اليوم إن وجدت
+  // تحديث سجلات الحضور لهذا اليوم إن كانت مسجلة غياباً إلى عطلة رسمية
   db.prepare(`
     UPDATE attendance_records 
-    SET status = 'VIP_EXEMPT', notes = ?
+    SET status = 'HOLIDAY', notes = ?
     WHERE date = ? AND status = 'ABSENT'
   `).run(`عطلة رسمية: ${title.trim()}`, date);
 

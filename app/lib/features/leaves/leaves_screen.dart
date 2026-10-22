@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
-import '../../shared/custom_button.dart';
+import '../../core/auth_provider.dart';
 import '../../tools/date_formatter.dart';
 
-/// Hint: شاشة إدارة الإجازات والعطلات والمناسبات الرسمية
+/// Hint: شاشة إدارة الإجازات والعطلات والمناسبات الرسمية (النقطة 9)
 class LeavesScreen extends StatefulWidget {
   const LeavesScreen({super.key});
 
@@ -18,6 +18,9 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
   List<dynamic> _leaves = [];
   List<dynamic> _holidays = [];
   List<dynamic> _employees = [];
+  List<dynamic> _departments = [];
+
+  String? _selectedDept;
 
   @override
   void initState() {
@@ -35,14 +38,21 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final leavesRes = await ApiClient.instance.get('/leaves');
+      String leavesUrl = '/leaves?';
+      if (_selectedDept != null && _selectedDept!.isNotEmpty) {
+        leavesUrl += 'department=${Uri.encodeComponent(_selectedDept!)}&';
+      }
+
+      final leavesRes = await ApiClient.instance.get(leavesUrl);
       final holidaysRes = await ApiClient.instance.get('/leaves/holidays');
-      final empsRes = await ApiClient.instance.get('/employees');
+      final empsRes = await ApiClient.instance.get('/employees?status=نشط&isExempt=0');
+      final deptsRes = await ApiClient.instance.get('/employees/departments');
 
       setState(() {
         _leaves = leavesRes is List ? leavesRes : [];
         _holidays = holidaysRes is List ? holidaysRes : [];
         _employees = empsRes is List ? empsRes : [];
+        _departments = deptsRes is List ? deptsRes.where((d) => d['is_excluded'] == 0).toList() : [];
         _isLoading = false;
       });
     } catch (_) {
@@ -98,8 +108,8 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            icon: const Icon(Icons.date_range_rounded, size: 16),
-                            label: Text('من: ${DateFormatter.toYmd(startDate)}'),
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text('من: ${DateFormatter.toYmd(startDate)}', style: const TextStyle(fontSize: 12)),
                             onPressed: () async {
                               final d = await showDatePicker(
                                 context: context,
@@ -107,20 +117,25 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                                 firstDate: DateTime(2025),
                                 lastDate: DateTime(2030),
                               );
-                              if (d != null) setModalState(() => startDate = d);
+                              if (d != null) {
+                                setModalState(() {
+                                  startDate = d;
+                                  if (endDate.isBefore(startDate)) endDate = startDate;
+                                });
+                              }
                             },
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton.icon(
-                            icon: const Icon(Icons.date_range_rounded, size: 16),
-                            label: Text('إلى: ${DateFormatter.toYmd(endDate)}'),
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text('إلى: ${DateFormatter.toYmd(endDate)}', style: const TextStyle(fontSize: 12)),
                             onPressed: () async {
                               final d = await showDatePicker(
                                 context: context,
                                 initialDate: endDate,
-                                firstDate: DateTime(2025),
+                                firstDate: startDate,
                                 lastDate: DateTime(2030),
                               );
                               if (d != null) setModalState(() => endDate = d);
@@ -132,7 +147,10 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                     const SizedBox(height: 12),
                     TextField(
                       controller: reasonController,
-                      decoration: const InputDecoration(labelText: 'السبب / الملاحظات'),
+                      decoration: const InputDecoration(
+                        labelText: 'السبب / الملاحظات',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ],
                 ),
@@ -141,20 +159,24 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               ElevatedButton(
-                onPressed: () async {
-                  if (selectedEmpId == null) return;
-                  await ApiClient.instance.post('/leaves', {
-                    'employeeId': selectedEmpId,
-                    'leaveType': leaveType,
-                    'startDate': DateFormatter.toYmd(startDate),
-                    'endDate': DateFormatter.toYmd(endDate),
-                    'reason': reasonController.text.trim(),
-                  });
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    _loadData();
-                  }
-                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
+                onPressed: selectedEmpId == null
+                    ? null
+                    : () async {
+                        try {
+                          await ApiClient.instance.post('/leaves', {
+                            'employeeId': selectedEmpId,
+                            'leaveType': leaveType,
+                            'startDate': DateFormatter.toYmd(startDate),
+                            'endDate': DateFormatter.toYmd(endDate),
+                            'reason': reasonController.text.trim(),
+                          });
+                          Navigator.pop(ctx);
+                          _loadData();
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                        }
+                      },
                 child: const Text('تسجيل الإجازة'),
               ),
             ],
@@ -173,14 +195,22 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return AlertDialog(
-            title: const Text('إضافة عطلة رسمية أو مناسبة'),
+            title: const Text('إضافة عطلة أو مناسبة رسمية'),
             content: SizedBox(
               width: 400,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المناسبة / العطلة الرسمية *',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    icon: const Icon(Icons.calendar_month_rounded),
+                    icon: const Icon(Icons.calendar_today, size: 16),
                     label: Text('تاريخ العطلة: ${DateFormatter.toYmd(holidayDate)}'),
                     onPressed: () async {
                       final d = await showDatePicker(
@@ -192,27 +222,24 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                       if (d != null) setModalState(() => holidayDate = d);
                     },
                   ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'اسم المناسبة أو العطلة * (مثال: عيد الأضحى)'),
-                  ),
                 ],
               ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
                 onPressed: () async {
-                  final title = titleController.text.trim();
-                  if (title.isEmpty) return;
-                  await ApiClient.instance.post('/leaves/holidays', {
-                    'date': DateFormatter.toYmd(holidayDate),
-                    'title': title,
-                  });
-                  if (mounted) {
+                  if (titleController.text.trim().isEmpty) return;
+                  try {
+                    await ApiClient.instance.post('/leaves/holidays', {
+                      'date': DateFormatter.toYmd(holidayDate),
+                      'title': titleController.text.trim(),
+                    });
                     Navigator.pop(ctx);
                     _loadData();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
                   }
                 },
                 child: const Text('إضافة العطلة'),
@@ -226,110 +253,162 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final auth = AuthProvider.instance;
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(48),
         child: Container(
-          color: Theme.of(context).cardTheme.color,
+          color: Theme.of(context).cardTheme.color ?? Colors.white,
           child: TabBar(
             controller: _tabController,
             labelColor: AppColors.navy,
-            indicatorColor: AppColors.goldBright,
+            indicatorColor: AppColors.gold,
             tabs: const [
-              Tab(icon: Icon(Icons.beach_access_rounded), text: 'سجل إجازات الموظفين'),
+              Tab(icon: Icon(Icons.beach_access_rounded), text: 'الإجازات والأذونات'),
               Tab(icon: Icon(Icons.celebration_rounded), text: 'العطل والمناسبات الرسمية'),
             ],
           ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+      body: Column(
+        children: [
+          // شريط فلترة القسم للإجازات
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: Theme.of(context).cardTheme.color?.withOpacity(0.5) ?? Colors.grey.shade50,
+            child: Row(
               children: [
-                // تبويب الإجازات
-                Scaffold(
-                  floatingActionButton: FloatingActionButton.extended(
-                    onPressed: _showAddLeaveDialog,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('تسجيل إجازة'),
+                SizedBox(
+                  width: 220,
+                  height: 38,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedDept,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    hint: const Text('كافة الأقسام', style: TextStyle(fontSize: 12)),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('كافة الأقسام', style: TextStyle(fontSize: 12))),
+                      ..._departments.map((d) => DropdownMenuItem(
+                            value: d['name'].toString(),
+                            child: Text(d['name'].toString(), style: const TextStyle(fontSize: 12)),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _selectedDept = val);
+                      _loadData();
+                    },
                   ),
-                  body: _leaves.isEmpty
-                      ? const Center(child: Text('لا توجد إجازات مسجلة حالياً'))
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(20),
-                          itemCount: _leaves.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            final l = _leaves[index];
-                            return Card(
-                              child: ListTile(
-                                leading: const CircleAvatar(
-                                  backgroundColor: AppColors.onLeave,
-                                  child: Icon(Icons.beach_access_rounded, color: Colors.white, size: 20),
-                                ),
-                                title: Text(
-                                  '[${l['emp_code']}] ${l['employee_name']} (${l['department']})',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  'إجازة ${l['leave_type']} • من ${l['start_date']} إلى ${l['end_date']}${l['reason'] != null && l['reason'].toString().isNotEmpty ? ' • ${l['reason']}' : ''}',
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                                  onPressed: () async {
-                                    await ApiClient.instance.delete('/leaves/${l['id']}');
-                                    _loadData();
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        ),
                 ),
-
-                // تبويب العطلات الرسمية
-                Scaffold(
-                  floatingActionButton: FloatingActionButton.extended(
-                    onPressed: _showAddHolidayDialog,
-                    icon: const Icon(Icons.add_rounded),
+                const Spacer(),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('تسجيل إجازة'),
+                  onPressed: _showAddLeaveDialog,
+                ),
+                if (auth.isSuperAdmin) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.navy),
+                    icon: const Icon(Icons.add_rounded, size: 18),
                     label: const Text('إضافة عطلة رسمية'),
+                    onPressed: _showAddHolidayDialog,
                   ),
-                  body: _holidays.isEmpty
-                      ? const Center(child: Text('لا توجد عطل رسمية مسجلة'))
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(20),
-                          itemCount: _holidays.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            final h = _holidays[index];
-                            return Card(
-                              child: ListTile(
-                                leading: const CircleAvatar(
-                                  backgroundColor: AppColors.goldBright,
-                                  child: Icon(Icons.celebration_rounded, color: AppColors.navyDeepDark, size: 20),
-                                ),
-                                title: Text(
-                                  h['title'] ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  'تاريخ العطلة: ${DateFormatter.toArabicDate(h['date'])} (${h['date']})',
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                                  onPressed: () async {
-                                    await ApiClient.instance.delete('/leaves/holidays/${h['id']}');
-                                    _loadData();
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
+                ],
               ],
             ),
+          ),
+
+          // محتوى التبويبات
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // تبويب 1: الإجازات
+                      _leaves.isEmpty
+                          ? const Center(child: Text('لا توجد إجازات مسجلة'))
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _leaves.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final l = _leaves[index];
+                                return Card(
+                                  child: ListTile(
+                                    leading: const CircleAvatar(
+                                      backgroundColor: AppColors.info,
+                                      child: Icon(Icons.beach_access_rounded, color: Colors.white, size: 20),
+                                    ),
+                                    title: Text(
+                                      '[${l['emp_code']}] ${l['employee_name'] ?? ''}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    subtitle: Text(
+                                      'نوع الإجازة: ${l['leave_type']} • من ${l['start_date']} إلى ${l['end_date']}' +
+                                          (l['reason'] != null && l['reason'].toString().isNotEmpty ? ' (${l['reason']})' : ''),
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                      onPressed: () async {
+                                        try {
+                                          await ApiClient.instance.delete('/leaves/${l['id']}');
+                                          _loadData();
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+
+                      // تبويب 2: العطلات الرسمية
+                      _holidays.isEmpty
+                          ? const Center(child: Text('لا توجد عطلات رسمية مسجلة'))
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _holidays.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final h = _holidays[index];
+                                return Card(
+                                  child: ListTile(
+                                    leading: const CircleAvatar(
+                                      backgroundColor: AppColors.holiday,
+                                      child: Icon(Icons.celebration_rounded, color: Colors.white, size: 20),
+                                    ),
+                                    title: Text(h['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    subtitle: Text('تاريخ العطلة: ${h['date']}', style: const TextStyle(fontSize: 12)),
+                                    trailing: auth.isSuperAdmin
+                                        ? IconButton(
+                                            icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                            onPressed: () async {
+                                              try {
+                                                await ApiClient.instance.delete('/leaves/holidays/${h['id']}');
+                                                _loadData();
+                                              } catch (e) {
+                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                                              }
+                                            },
+                                          )
+                                        : null,
+                                  ),
+                                );
+                              },
+                            ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

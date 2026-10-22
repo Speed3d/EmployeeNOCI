@@ -38,6 +38,10 @@ class AppConstants {
         return 'مستثنى VIP';
       case 'DEPT_EXCLUDED':
         return 'قسم مستبعد';
+      case 'HOLIDAY':
+        return 'عطلة رسمية';
+      case 'OFF_DAY':
+        return 'يوم راحة';
       default:
         return status;
     }
@@ -64,6 +68,10 @@ class AppConstants {
         return AppColors.vipExempt;
       case 'DEPT_EXCLUDED':
         return Colors.grey;
+      case 'HOLIDAY':
+        return AppColors.holiday;
+      case 'OFF_DAY':
+        return AppColors.offDay;
       default:
         return Colors.blueGrey;
     }

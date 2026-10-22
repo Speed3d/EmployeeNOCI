@@ -1,13 +1,13 @@
 /**
  * Hint: نقطة الانطلاق الرئيسية لخادم النظام (Express Server)
- * يجمع كافة المسارات، يفعل حماية CORS، ويدمج نقاط الـ API مع استضافة الواجهة
+ * يجمع كافة المسارات، يفعل حماية CORS، ويدمج نقاط الـ API مع استضافة الواجهة والملفات المرفوعة
  */
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-const { PORT } = require('./core/config');
+const { PORT, UPLOADS_DIR } = require('./core/config');
 const db = require('./core/database');
 
 // استيراد المسارات المقسمة حسب الميزات (Features)
@@ -19,6 +19,7 @@ const settingRoutes = require('./features/settings/settingRoutes');
 const auditRoutes = require('./features/audit_logs/auditRoutes');
 const chatRoutes = require('./features/chat/chatRoutes');
 const reportRoutes = require('./features/reports/reportRoutes');
+const scheduleRoutes = require('./features/schedules/scheduleRoutes');
 
 const app = express();
 
@@ -32,6 +33,9 @@ app.use(cors({
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+// استضافة مجلد المرفقات (الصور الشخصية والشعارات)
+app.use('/uploads', express.static(UPLOADS_DIR));
+
 // 1. فحص صحة الخادم وحالته العامة (Health Check)
 app.get('/api/system/status', (req, res) => {
   const settingsRows = db.prepare('SELECT key, value FROM system_settings').all();
@@ -41,10 +45,13 @@ app.get('/api/system/status', (req, res) => {
   res.json({
     success: true,
     name: 'NOCI Attendance Intelligence API',
-    version: '1.0.0',
+    version: '2.0.0',
     status: 'ONLINE',
     activeYear: settings['active_year'] || '2026',
     isMaintenance: settings['maintenance_mode'] === 'true',
+    institutionName: settings['institution_name'] || 'اللجنة الأولمبية الوطنية العراقية (NOCI)',
+    appTitle: settings['app_title'] || 'نظام متابعة حضور وانصراف موظفي المقر',
+    logoUrl: settings['logo_url'] || '',
     announcementBanner: settings['announcement_banner_active'] === 'true' ? settings['announcement_banner_text'] : '',
     timestamp: new Date().toISOString()
   });
@@ -59,13 +66,14 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/schedules', scheduleRoutes);
 
 // 3. استضافة ملفات الويب المجمعة من Flutter إن وجدت
 const webBuildPath = path.join(__dirname, '../../app/build/web');
 if (fs.existsSync(webBuildPath)) {
   app.use(express.static(webBuildPath));
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
     res.sendFile(path.join(webBuildPath, 'index.html'));
   });
 } else {

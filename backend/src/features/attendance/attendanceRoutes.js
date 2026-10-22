@@ -1,5 +1,5 @@
 /**
- * Hint: مسارات كشوفات البصمة والحضور اليومي
+ * Hint: مسارات كشوفات البصمة والحضور اليومي والمعاينة والاعتماد
  */
 const express = require('express');
 const router = express.Router();
@@ -11,11 +11,22 @@ const { ROLES } = require('../../shared/constants');
 // رفع الملفات في الذاكرة لتسريع التحليل
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 } // حتى 15 ميغابايت
+  limits: { fileSize: 25 * 1024 * 1024 } // حتى 25 ميغابايت
 });
 
-router.post('/upload', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER, ROLES.DATA_ENTRY]), upload.single('file'), attendanceController.uploadDailyAttendance);
+// معاينة الكشف بدون حفظ (سوبر أدمن ومدخل بيانات)
+router.post('/preview', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.DATA_ENTRY]), upload.single('file'), attendanceController.previewAttendance);
+
+// اعتماد وحفظ الكشف في القاعدة (سوبر أدمن ومدخل بيانات)
+router.post('/commit', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.DATA_ENTRY]), attendanceController.commitAttendance);
+
+// فحص حالة اليوم
+router.get('/check-status', authenticateToken, attendanceController.checkDayStatus);
+
+// جلب كشف الحضور ليوم محدد
 router.get('/daily', authenticateToken, attendanceController.getDailyAttendance);
-router.post('/recalculate', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]), attendanceController.recalculateDay);
+
+// إعادة احتساب واعتماد يوم معتمد
+router.post('/recalculate', authenticateToken, attendanceController.recalculateDay);
 
 module.exports = router;

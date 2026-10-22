@@ -1,21 +1,31 @@
 /**
- * Hint: مسارات الموظفين والأقسام
+ * Hint: مسارات الموظفين والأقسام ونقل الموظفين والاستيراد
  */
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const employeeController = require('./employeeController');
-const { authenticateToken, requireRoles } = require('../../core/authMiddleware');
-const { ROLES } = require('../../shared/constants');
+const { authenticateToken, requireSuperAdmin } = require('../../core/authMiddleware');
 
-// العمليات المتاحة
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }
+});
+
+// قائمة وعرض الموظفين (متاح للجميع بعد المصادقة)
 router.get('/', authenticateToken, employeeController.listEmployees);
 router.get('/departments', authenticateToken, employeeController.listDepartments);
-router.put('/departments/:id/toggle-exclusion', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]), employeeController.toggleDepartmentExclusion);
-
 router.get('/:id', authenticateToken, employeeController.getEmployee);
-router.post('/', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]), employeeController.createEmployee);
-router.put('/:id', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.HR_MANAGER]), employeeController.updateEmployee);
-router.delete('/:id', authenticateToken, requireRoles([ROLES.SUPER_ADMIN]), employeeController.deleteEmployee);
-router.put('/:id/toggle-exempt', authenticateToken, requireRoles([ROLES.SUPER_ADMIN]), employeeController.toggleVipExempt);
+
+// تعديل استبعاد الأقسام (سوبر أدمن أو من يملك صلاحية)
+router.put('/departments/:id/exclusion', authenticateToken, employeeController.toggleDepartmentExclusion);
+
+// إدارة الموظفين ونقلهم واستيرادهم (حصرياً للسوبر أدمن)
+router.post('/', authenticateToken, requireSuperAdmin, employeeController.createEmployee);
+router.put('/:id', authenticateToken, requireSuperAdmin, employeeController.updateEmployee);
+router.delete('/:id', authenticateToken, requireSuperAdmin, employeeController.deleteEmployee);
+router.post('/:id/transfer', authenticateToken, requireSuperAdmin, employeeController.transferEmployee);
+router.put('/:id/vip-exempt', authenticateToken, requireSuperAdmin, employeeController.toggleVipExempt);
+router.post('/import-excel', authenticateToken, requireSuperAdmin, upload.single('file'), employeeController.importEmployeesExcel);
 
 module.exports = router;

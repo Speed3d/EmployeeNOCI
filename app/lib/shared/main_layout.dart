@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../core/theme.dart';
 import '../core/constants.dart';
 import '../tools/responsive.dart';
+import '../features/auth/profile_dialog.dart';
 
 /// Hint: الإطار الهيكلي العام للشاشات (Main Layout)
 /// يدعم التجاوب الذكي مع الهواتف الذكية (Overlay Drawer) وشريط التنبيهات العلوي
@@ -40,12 +42,13 @@ class _MainLayoutState extends State<MainLayout> {
       _NavItem(Icons.dashboard_rounded, 'لوحة المؤشرات', 0),
       _NavItem(Icons.fingerprint_rounded, 'كشف الحضور اليومي', 1),
       _NavItem(Icons.people_alt_rounded, 'سجل الموظفين', 2),
-      _NavItem(Icons.event_note_rounded, 'الإجازات والعطلات', 3),
-      _NavItem(Icons.assessment_rounded, 'التقارير الشهرية', 4),
-      _NavItem(Icons.chat_bubble_outline_rounded, 'المحادثة الفورية', 5),
+      _NavItem(Icons.calendar_month_rounded, 'جداول الدوام والراحة', 3),
+      _NavItem(Icons.event_note_rounded, 'الإجازات والعطلات', 4),
+      _NavItem(Icons.assessment_rounded, 'التقارير الشهرية', 5),
+      _NavItem(Icons.chat_bubble_outline_rounded, 'المحادثة الفورية', 6),
       if (auth.isSuperAdmin) ...[
-        _NavItem(Icons.history_rounded, 'سجل الحركات (Logs)', 6),
-        _NavItem(Icons.settings_rounded, 'الإعدادات والصيانة', 7),
+        _NavItem(Icons.history_rounded, 'سجل الحركات (Logs)', 7),
+        _NavItem(Icons.settings_rounded, 'الإعدادات والصيانة', 8),
       ],
     ];
 
@@ -164,30 +167,61 @@ class _MainLayoutState extends State<MainLayout> {
 
                 const SizedBox(width: 12),
 
-                // اسم المستخدم ودوره
-                if (!Responsive.isMobile(context)) ...[
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        auth.user?['fullName'] ?? 'المستخدم',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
+                // اسم وصورة المستخدم (قابل للنقر لفتح الملف الشخصي - النقطة 14)
+                InkWell(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => const ProfileDialog(),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 17,
+                          backgroundColor: AppColors.navy.withOpacity(0.12),
+                          backgroundImage: auth.user?['avatarUrl'] != null && auth.user!['avatarUrl'].toString().isNotEmpty
+                              ? NetworkImage('${ApiClient.instance.baseUrl.replaceAll('/api', '')}${auth.user!['avatarUrl']}')
+                              : null,
+                          child: (auth.user?['avatarUrl'] == null || auth.user!['avatarUrl'].toString().isEmpty)
+                              ? Text(
+                                  (auth.user?['fullName'] ?? 'U').substring(0, 1).toUpperCase(),
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy),
+                                )
+                              : null,
                         ),
-                      ),
-                      Text(
-                        auth.isSuperAdmin ? 'سوبر أدمن' : 'موارد بشرية',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
+                        if (!Responsive.isMobile(context)) ...[
+                          const SizedBox(width: 8),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                auth.user?['fullName'] ?? 'المستخدم',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                auth.isSuperAdmin ? 'سوبر أدمن' : 'مدخل بيانات',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                ],
+                ),
+                const SizedBox(width: 8),
 
                 // زر تسجيل الخروج
                 IconButton(

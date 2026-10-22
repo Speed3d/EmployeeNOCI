@@ -204,6 +204,18 @@ class _EmployeeDialogState extends State<EmployeeDialog> {
                   ),
                 ),
               ],
+
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                ),
+              ],
             ],
           ),
         ),

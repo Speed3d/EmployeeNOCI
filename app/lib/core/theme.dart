@@ -24,6 +24,8 @@ class AppColors {
   static const Color onLeave = Color(0xFF1E6BB8);      // أزرق - إجازة رسمية
   static const Color vipExempt = Color(0xFF5A6E85);    // رمادي - مستثنى قيادي
   static const Color missedPunch = Color(0xFF8E44AD);  // بنفسجي - بصمة واحدة فقط
+  static const Color holiday = Color(0xFF7E57C2);      // أرجواني هادئ للعطلات الرسمية
+  static const Color offDay = Color(0xFF78909C);       // رمادي مزرق لأيام الراحة الأسبوعية
 
   // الحالات العامة
   static const Color success = Color(0xFF178A5B);

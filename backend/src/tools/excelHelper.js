@@ -191,15 +191,15 @@ function parseDailyAttendanceFile(filePathOrBuffer) {
       }
     }
 
-    const firstPunch = item.punches[0];
-    const lastPunch = item.punches[item.punches.length - 1];
+    const firstPunch = uniquePunches[0];
+    const lastPunch = uniquePunches[uniquePunches.length - 1];
 
     processedEmployees.push({
       empCode: item.empCode,
       name: item.name,
       department: item.department,
-      punchCount: item.punches.length,
-      allPunches: item.punches,
+      punchCount: uniquePunches.length,
+      allPunches: uniquePunches,
       firstPunch,
       lastPunch
     });

@@ -1,5 +1,5 @@
 /**
- * Hint: مسارات التقارير والتصدير
+ * Hint: مسارات التقارير الشاملة الشهرية وتصدير الإكسل
  */
 const express = require('express');
 const router = express.Router();
@@ -7,6 +7,7 @@ const reportController = require('./reportController');
 const { authenticateToken } = require('../../core/authMiddleware');
 
 router.get('/monthly', authenticateToken, reportController.getMonthlyTimesheet);
-router.get('/export-daily-excel', authenticateToken, reportController.exportDailyExcel);
+router.post('/export-excel', authenticateToken, reportController.exportGenericExcel);
+router.get('/export-daily', authenticateToken, reportController.exportDailyExcel);
 
 module.exports = router;

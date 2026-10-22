@@ -5,6 +5,7 @@ import 'api_client.dart';
 import 'constants.dart';
 
 /// Hint: مزود حالة المصادقة وإدارة الجلسات والصلاحيات (Auth Provider)
+/// يدعم الرتبتين المعتمدتين: السوبر أدمن ومدخل البيانات مع الصلاحيات الخاصة
 class AuthProvider extends ChangeNotifier {
   static final AuthProvider instance = AuthProvider._();
   AuthProvider._();
@@ -20,8 +21,13 @@ class AuthProvider extends ChangeNotifier {
   String? get announcementBanner => _announcementBanner;
   bool get isMaintenance => _isMaintenance;
 
+  // الرتب الحصرية
   bool get isSuperAdmin => _user != null && _user!['role'] == 'SUPER_ADMIN';
-  bool get isHrManager => _user != null && (_user!['role'] == 'SUPER_ADMIN' || _user!['role'] == 'HR_MANAGER');
+  bool get isDataEntry => _user != null && _user!['role'] == 'DATA_ENTRY';
+
+  // الصلاحيات الإضافية المفوضة لمدخل البيانات
+  bool get canManageExclusions => isSuperAdmin || (_user != null && _user!['canManageExclusions'] == true);
+  bool get canRecommit => isSuperAdmin || (_user != null && _user!['canRecommit'] == true);
 
   Future<void> init() async {
     _isLoading = true;
@@ -62,6 +68,25 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(AppConstants.userKey, jsonEncode(_user));
 
+    notifyListeners();
+  }
+
+  Future<void> refreshProfile() async {
+    try {
+      final res = await ApiClient.instance.get('/auth/me');
+      if (res['user'] != null) {
+        updateUser(Map<String, dynamic>.from(res['user']));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> updateUser(Map<String, dynamic> updated) async {
+    _user = {
+      ...?_user,
+      ...updated,
+    };
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.userKey, jsonEncode(_user));
     notifyListeners();
   }
 

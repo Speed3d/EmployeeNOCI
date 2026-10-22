@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 import '../../shared/custom_button.dart';
 
-/// Hint: لوحة التحكم الشاملة الحصرية للسوبر أدمن (Settings & System Control)
+/// Hint: لوحة التحكم الشاملة الحصرية للسوبر أدمن (الإصدار الثاني المعتمد)
+/// تشمل كشف كلمات المرور، استثناءات الأقسام، الشعار، وتصفير النظام
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -31,14 +33,16 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   String _bonusMode = 'default';
   bool _bannerActive = false;
   bool _maintenanceMode = false;
+  String _currentLogoUrl = '';
 
-  // قائمة المستخدمين
+  // قائمة المستخدمين والأقسام
   List<dynamic> _users = [];
+  List<dynamic> _departments = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadSettingsAndUsers();
   }
 
@@ -61,6 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     try {
       final settings = await ApiClient.instance.get('/settings');
       final users = await ApiClient.instance.get('/settings/users');
+      final depts = await ApiClient.instance.get('/employees/departments');
 
       setState(() {
         _institutionNameController.text = settings['institution_name'] ?? '';
@@ -75,8 +80,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _bannerActive = settings['announcement_banner_active'] == 'true';
         _maintenanceMode = settings['maintenance_mode'] == 'true';
         _activeYearController.text = settings['active_year'] ?? '2026';
+        _currentLogoUrl = settings['logo_url'] ?? '';
 
         _users = users is List ? users : [];
+        _departments = depts is List ? depts : [];
         _isLoading = false;
       });
     } catch (e) {
@@ -102,124 +109,274 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         'announcement_banner_text': _bannerTextController.text.trim(),
         'announcement_banner_active': _bannerActive.toString(),
         'maintenance_mode': _maintenanceMode.toString(),
-        'active_year': _activeYearController.text.trim(),
       };
 
       await ApiClient.instance.put('/settings', body);
-
-      // تحديث البانر في واجهة المستخدم فوراً
       AuthProvider.instance.updateBanner(_bannerActive ? _bannerTextController.text.trim() : null);
 
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.onTime,
-            content: Text('تم حفظ وتطبيق الإعدادات بنجاح!'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم حفظ الإعدادات بنجاح!')),
+      );
+      _loadSettingsAndUsers();
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
-  void _showAddUserDialog([Map<String, dynamic>? user]) {
-    final isEditing = user != null;
-    final usernameController = TextEditingController(text: user?['username'] ?? '');
-    final nameController = TextEditingController(text: user?['full_name'] ?? '');
+  // رفع شعار المؤسسة
+  Future<void> _uploadLogo() async {
+    try {
+      final files = await FilePicker.pickFiles(type: FileType.image);
+      if (files.isNotEmpty) {
+        final file = files.first;
+        final bytes = await file.xFile.readAsBytes();
+        setState(() => _isLoading = true);
+        await ApiClient.instance.uploadFile('/settings/logo', bytes, file.name);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم رفع وتحديث الشعار بنجاح!')),
+        );
+        _loadSettingsAndUsers();
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل رفع الشعار: $e')));
+    }
+  }
+
+  // كشف كلمة المرور لمستخدم محدد (النقطة 15)
+  Future<void> _revealPassword(int userId, String username) async {
+    try {
+      final res = await ApiClient.instance.get('/settings/users/$userId/reveal-password');
+      final pass = res['password'] ?? '';
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.remove_red_eye_rounded, color: AppColors.navy),
+              const SizedBox(width: 8),
+              Text('كلمة مرور [$username]'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('كلمة المرور الحالية هي:', style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.navy.withOpacity(0.3)),
+                ),
+                child: SelectableText(
+                  pass,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                    color: AppColors.navy,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                '⚠️ تنبيه أمني: تم تسجيل عملية كشف كلمة المرور هذه بالوقت وعنوان الـ IP في سجل التدقيق الأمني.',
+                style: TextStyle(fontSize: 11, color: AppColors.late, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.danger, content: Text('فشل كشف كلمة المرور: $e')),
+      );
+    }
+  }
+
+  // تصفير النظام وإعادة الضبط (حصري للسوبر أدمن)
+  Future<void> _resetDatabase() async {
+    final passwordController = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 28),
+            SizedBox(width: 8),
+            Text('تصفير النظام وإعادة الضبط'),
+          ],
+        ),
+        content: SizedBox(
+          width: 450,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'تحذير صارم: هذه العملية ستقوم بحذف كافة سجلات الحضور والانصراف، الأيام المعتمدة، الإجازات، وجداول الدوام وإعادة النظام لنقطة البداية.',
+                style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              const Text('للتأكيد، يرجى إدخال كلمة مرور السوبر أدمن:'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'كلمة المرور *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock_rounded),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تأكيد التصفير النهائي'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || passwordController.text.trim().isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.instance.post('/settings/reset-db', {
+        'password': passwordController.text.trim(),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text(res['message'] ?? 'تم تصفير النظام وإعادة الضبط بنجاح!'),
+        ),
+      );
+      _loadSettingsAndUsers();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.danger, content: Text('فشل التصفير: $e')),
+      );
+    }
+  }
+
+  // إضافة أو تعديل مستخدم
+  void _showUserDialog([Map<String, dynamic>? user]) {
+    final isEdit = user != null;
+    final usernameController = TextEditingController(text: user?['username']);
+    final fullNameController = TextEditingController(text: user?['full_name']);
     final passwordController = TextEditingController();
     String role = user?['role'] ?? 'DATA_ENTRY';
-    bool isActive = user?['is_active'] == 1 || user?['is_active'] == true || user == null;
+    bool canManageExclusions = user?['can_manage_exclusions'] == 1;
+    bool canRecommit = user?['can_recommit'] == 1;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return AlertDialog(
-            title: Text(isEditing ? 'تعديل المستخدم' : 'إضافة مستخدم جديد'),
+            title: Text(isEdit ? 'تعديل بيانات المستخدم' : 'إضافة مستخدم جديد'),
             content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'الاسم الكامل *'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: usernameController,
-                    enabled: !isEditing,
-                    decoration: const InputDecoration(labelText: 'اسم المستخدم (Login Username) *'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: isEditing ? 'كلمة المرور الجديدة (اتركه فارغاً للإبقاء)' : 'كلمة المرور *',
+              width: 450,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: usernameController,
+                      enabled: !isEdit,
+                      decoration: const InputDecoration(labelText: 'اسم المستخدم (للدخول) *', border: OutlineInputBorder()),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: role,
-                    decoration: const InputDecoration(labelText: 'الصلاحية / الدور *'),
-                    items: const [
-                      DropdownMenuItem(value: 'SUPER_ADMIN', child: Text('سوبر أدمن (تحكم كامل)')),
-                      DropdownMenuItem(value: 'HR_MANAGER', child: Text('مدير موارد بشرية')),
-                      DropdownMenuItem(value: 'DATA_ENTRY', child: Text('مدخل بيانات')),
-                      DropdownMenuItem(value: 'AUDITOR', child: Text('مراجع / مشاهد فقط')),
-                    ],
-                    onChanged: (val) => setModalState(() => role = val ?? 'DATA_ENTRY'),
-                  ),
-                  if (isEditing) ...[
                     const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('الحساب نشط ومفعل'),
-                      value: isActive,
-                      onChanged: (val) => setModalState(() => isActive = val),
+                    TextField(
+                      controller: fullNameController,
+                      decoration: const InputDecoration(labelText: 'الاسم الكامل *', border: OutlineInputBorder()),
                     ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: isEdit ? 'كلمة المرور الجديدة (اتركه فارغاً للإبقاء)' : 'كلمة المرور *',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: role,
+                      decoration: const InputDecoration(labelText: 'الرتبة والدور *', border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'SUPER_ADMIN', child: Text('سوبر أدمن (تحكم كامل)')),
+                        DropdownMenuItem(value: 'DATA_ENTRY', child: Text('مدخل بيانات')),
+                      ],
+                      onChanged: (val) => setModalState(() => role = val!),
+                    ),
+                    const SizedBox(height: 12),
+                    // تفويض الصلاحيات لمدخل البيانات
+                    if (role == 'DATA_ENTRY') ...[
+                      SwitchListTile(
+                        title: const Text('صلاحية تعديل استثناء الأقسام', style: TextStyle(fontSize: 13)),
+                        value: canManageExclusions,
+                        onChanged: (val) => setModalState(() => canManageExclusions = val),
+                      ),
+                      SwitchListTile(
+                        title: const Text('صلاحية إعادة اعتماد كشف سبق اعتماده', style: TextStyle(fontSize: 13)),
+                        value: canRecommit,
+                        onChanged: (val) => setModalState(() => canRecommit = val),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
                 onPressed: () async {
-                  if (nameController.text.trim().isEmpty) return;
-                  if (!isEditing && (usernameController.text.trim().isEmpty || passwordController.text.isEmpty)) return;
-
-                  if (!isEditing) {
-                    await ApiClient.instance.post('/settings/users', {
-                      'fullName': nameController.text.trim(),
-                      'username': usernameController.text.trim(),
-                      'password': passwordController.text.trim(),
-                      'role': role,
-                    });
-                  } else {
-                    final body = {
-                      'fullName': nameController.text.trim(),
-                      'role': role,
-                      'isActive': isActive,
-                    };
-                    if (passwordController.text.isNotEmpty) {
-                      body['newPassword'] = passwordController.text.trim();
+                  try {
+                    if (isEdit) {
+                      await ApiClient.instance.put('/settings/users/${user['id']}', {
+                        'fullName': fullNameController.text.trim(),
+                        'role': role,
+                        'newPassword': passwordController.text.trim().isNotEmpty ? passwordController.text.trim() : null,
+                        'canManageExclusions': canManageExclusions,
+                        'canRecommit': canRecommit,
+                      });
+                    } else {
+                      await ApiClient.instance.post('/settings/users', {
+                        'username': usernameController.text.trim(),
+                        'fullName': fullNameController.text.trim(),
+                        'password': passwordController.text.trim(),
+                        'role': role,
+                        'canManageExclusions': canManageExclusions,
+                        'canRecommit': canRecommit,
+                      });
                     }
-                    await ApiClient.instance.put('/settings/users/${user['id']}', body);
-                  }
-
-                  if (mounted) {
                     Navigator.pop(ctx);
                     _loadSettingsAndUsers();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
                   }
                 },
-                child: Text(isEditing ? 'تحديث' : 'إنشاء الحساب'),
+                child: const Text('حفظ'),
               ),
             ],
           );
@@ -230,365 +387,388 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final auth = AuthProvider.instance;
+
+    // حماية لوحة الإعدادات للسوبر أدمن فقط
+    if (!auth.isSuperAdmin) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_rounded, size: 64, color: AppColors.danger),
+            SizedBox(height: 16),
+            Text(
+              'عذراً، لوحة الإعدادات والصيانة محصورة بالسوبر أدمن فقط',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(48),
         child: Container(
-          color: Theme.of(context).cardTheme.color,
+          color: Theme.of(context).cardTheme.color ?? Colors.white,
           child: TabBar(
             controller: _tabController,
+            isScrollable: true,
             labelColor: AppColors.navy,
-            indicatorColor: AppColors.goldBright,
+            indicatorColor: AppColors.gold,
             tabs: const [
-              Tab(icon: Icon(Icons.timer_rounded), text: 'أوقات الدوام والمكافآت'),
-              Tab(icon: Icon(Icons.tune_rounded), text: 'الهوية والشريط والصيانة'),
-              Tab(icon: Icon(Icons.admin_panel_settings_rounded), text: 'المستخدمين والصلاحيات'),
+              Tab(icon: Icon(Icons.access_time_rounded), text: 'قواعد الدوام والمكافأة'),
+              Tab(icon: Icon(Icons.branding_watermark_rounded), text: 'الهوية والمؤسسة'),
+              Tab(icon: Icon(Icons.filter_alt_off_rounded), text: 'استثناء الأقسام'),
+              Tab(icon: Icon(Icons.manage_accounts_rounded), text: 'المستخدمون والصلاحيات'),
+              Tab(icon: Icon(Icons.restart_alt_rounded), text: 'تصفير النظام والصيانة'),
             ],
           ),
         ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                // 1. أوقات الدوام والمكافآت
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'أوقات الدوام الرسمي المعتمد',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'يتم حساب التأخير والانصراف المبكر تلقائياً بناءً على هذه الأوقات:',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                                const SizedBox(height: 18),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _workStartTimeController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'وقت بدء الحضور الصباحي (HH:MM)',
-                                          hintText: '10:00',
-                                          prefixIcon: Icon(Icons.login_rounded),
+          : _error != null
+              ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger)))
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // تبويب 1: قواعد الدوام والمكافأة
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('أوقات الدوام الرسمي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _workStartTimeController,
+                                          decoration: const InputDecoration(labelText: 'بدء الدوام (10:00)', border: OutlineInputBorder()),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _workEndTimeController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'وقت نهاية الدوام والانصراف (HH:MM)',
-                                          hintText: '15:00',
-                                          prefixIcon: Icon(Icons.logout_rounded),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _workEndTimeController,
+                                          decoration: const InputDecoration(labelText: 'نهاية الدوام (15:00)', border: OutlineInputBorder()),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 18),
-
-                        // محرك احتساب المكافآت والإضافي
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SwitchListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('تفعيل احتساب مكافأة الحضور المبكر والدوام الإضافي', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: const Text('حساب دقائق المكافأة لمن يحضر قبل الوقت أو يغادر بعد نهاية الدوام'),
-                                  value: _bonusEnabled,
-                                  onChanged: (val) => setState(() => _bonusEnabled = val),
-                                ),
-                                if (_bonusEnabled) ...[
-                                  const Divider(height: 24),
-                                  DropdownButtonFormField<String>(
-                                    value: _bonusMode,
-                                    decoration: const InputDecoration(labelText: 'نمط تحديد أوقات المكافأة'),
-                                    items: const [
-                                      DropdownMenuItem(value: 'default', child: Text('الوضع الافتراضي (حضور قبل 09:00 / انصراف بعد 15:00)')),
-                                      DropdownMenuItem(value: 'custom', child: Text('وضع يدوي مخصص (تحديد الأوقات يدوياً)')),
-                                    ],
-                                    onChanged: (val) => setState(() => _bonusMode = val ?? 'default'),
+                          const SizedBox(height: 16),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SwitchListTile(
+                                    title: const Text('تفعيل مكافأة الحضور المبكر والإضافي', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    value: _bonusEnabled,
+                                    onChanged: (val) => setState(() => _bonusEnabled = val),
                                   ),
-                                  if (_bonusMode == 'custom') ...[
-                                    const SizedBox(height: 14),
+                                  if (_bonusEnabled) ...[
+                                    const SizedBox(height: 12),
+                                    const Text('نمط احتساب المكافأة:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: TextField(
-                                            controller: _earlyBonusTimeController,
-                                            decoration: const InputDecoration(labelText: 'وقت احتساب الحضور المبكر (مثال 09:15)'),
+                                          child: RadioListTile<String>(
+                                            title: const Text('افتراضي (09:00 و 15:00)', style: TextStyle(fontSize: 13)),
+                                            value: 'default',
+                                            groupValue: _bonusMode,
+                                            onChanged: (val) => setState(() => _bonusMode = val!),
                                           ),
                                         ),
-                                        const SizedBox(width: 14),
                                         Expanded(
-                                          child: TextField(
-                                            controller: _overtimeBonusTimeController,
-                                            decoration: const InputDecoration(labelText: 'وقت احتساب الإضافي بعد الدوام (مثال 15:30)'),
+                                          child: RadioListTile<String>(
+                                            title: const Text('مخصص حسب الرغبة', style: TextStyle(fontSize: 13)),
+                                            value: 'custom',
+                                            groupValue: _bonusMode,
+                                            onChanged: (val) => setState(() => _bonusMode = val!),
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        CustomButton(
-                          label: 'حفظ إعدادات الدوام والمكافآت',
-                          icon: Icons.save_rounded,
-                          onPressed: _saveSettings,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // 2. الهوية والشريط ووضع الصيانة
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // هوية المؤسسة
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('بيانات وهوية المؤسسة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                const SizedBox(height: 14),
-                                TextField(
-                                  controller: _institutionNameController,
-                                  decoration: const InputDecoration(labelText: 'اسم المؤسسة الرسمي'),
-                                ),
-                                const SizedBox(height: 14),
-                                TextField(
-                                  controller: _appTitleController,
-                                  decoration: const InputDecoration(labelText: 'عنوان النظام في الترويسة والتقارير'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-
-                        // شريط التنبيهات العلوي
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SwitchListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('تفعيل شريط التنبيهات والإعلانات العلوي', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: const Text('إظهار شريط بلون مميز في أعلى الشاشة يراه جميع المستخدمين'),
-                                  value: _bannerActive,
-                                  onChanged: (val) => setState(() => _bannerActive = val),
-                                ),
-                                if (_bannerActive) ...[
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _bannerTextController,
-                                    maxLines: 2,
-                                    decoration: const InputDecoration(
-                                      labelText: 'نص التنبيه أو التعميم الإداري',
-                                      hintText: 'مثال: يرجى من جميع الموظفين مراجعة قسم الإدارة بخصوص...',
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-
-                        // وضع الصيانة والترحيل السنوي
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SwitchListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('وضع الصيانة (Maintenance Mode)', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.danger)),
-                                  subtitle: const Text('إيقاف وصول كافة المستخدمين العاديين وإبقائه حصراً للسوبر أدمن أثناء التحديثات'),
-                                  value: _maintenanceMode,
-                                  onChanged: (val) => setState(() => _maintenanceMode = val),
-                                ),
-                                const Divider(height: 24),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _activeYearController,
-                                        decoration: const InputDecoration(labelText: 'السنة النشطة حالياً (مثال: 2026 أو 2027)'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    OutlinedButton.icon(
-                                      icon: const Icon(Icons.arrow_forward_rounded),
-                                      label: const Text('ترحيل وفتح سنة جديدة'),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: const Text('تأكيد الترحيل السنوي'),
-                                            content: Text('هل أنت متأكد من اعتماد السنة [${_activeYearController.text}] كسنة نشطة؟ (ستبقى كافة بيانات السنوات السابقة محفوظة بالكامل).'),
-                                            actions: [
-                                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-                                              ElevatedButton(
-                                                onPressed: () async {
-                                                  Navigator.pop(ctx);
-                                                  await ApiClient.instance.post('/settings/switch-year', {
-                                                    'year': _activeYearController.text.trim(),
-                                                  });
-                                                  _saveSettings();
-                                                },
-                                                child: const Text('تأكيد الترحيل'),
-                                              ),
-                                            ],
+                                    if (_bonusMode == 'custom') ...[
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _earlyBonusTimeController,
+                                              decoration: const InputDecoration(labelText: 'وقت الحضور المبكر', border: OutlineInputBorder()),
+                                            ),
                                           ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        CustomButton(
-                          label: 'حفظ وتطبيق كافة الإعدادات',
-                          icon: Icons.save_rounded,
-                          onPressed: _saveSettings,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // 3. إدارة المستخدمين والصلاحيات
-                Scaffold(
-                  floatingActionButton: FloatingActionButton.extended(
-                    onPressed: () => _showAddUserDialog(),
-                    icon: const Icon(Icons.person_add_rounded),
-                    label: const Text('إضافة مستخدم'),
-                  ),
-                  body: ListView.separated(
-                    padding: const EdgeInsets.all(24),
-                    itemCount: _users.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final u = _users[index];
-                      final isSuper = u['role'] == 'SUPER_ADMIN';
-
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isSuper ? AppColors.goldBright.withOpacity(0.2) : AppColors.navy.withOpacity(0.1),
-                            child: Icon(
-                              isSuper ? Icons.security_rounded : Icons.person_rounded,
-                              color: isSuper ? AppColors.goldDark : AppColors.navy,
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(u['full_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isSuper ? AppColors.goldDark.withOpacity(0.15) : Colors.grey.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  u['role'] ?? '',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSuper ? AppColors.goldDark : Colors.grey,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Text('اسم الدخول: ${u['username']} • الحالة: ${u['is_active'] == 1 ? 'نشط' : 'معطل'}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                tooltip: 'تعديل الصلاحيات أو كلمة المرور',
-                                onPressed: () => _showAddUserDialog(u),
-                              ),
-                              if (!isSuper)
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                                  tooltip: 'حذف الحساب',
-                                  onPressed: () async {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: const Text('حذف المستخدم'),
-                                        content: Text('هل أنت متأكد من حذف الحساب [${u['username']}]؟'),
-                                        actions: [
-                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-                                            onPressed: () => Navigator.pop(ctx, true),
-                                            child: const Text('تأكيد الحذف', style: TextStyle(color: Colors.white)),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _overtimeBonusTimeController,
+                                              decoration: const InputDecoration(labelText: 'وقت بدء الإضافي', border: OutlineInputBorder()),
+                                            ),
                                           ),
                                         ],
                                       ),
-                                    );
-                                    if (confirm == true) {
-                                      await ApiClient.instance.delete('/settings/users/${u['id']}');
-                                      _loadSettingsAndUsers();
-                                    }
-                                  },
-                                ),
+                                    ],
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          CustomButton(label: 'حفظ إعدادات الدوام', onPressed: _saveSettings),
+                        ],
+                      ),
+                    ),
+
+                    // تبويب 2: الهوية والمؤسسة
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('هوية وشعار النظام', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: _institutionNameController,
+                                    decoration: const InputDecoration(labelText: 'اسم المؤسسة الرسمي', border: OutlineInputBorder()),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: _appTitleController,
+                                    decoration: const InputDecoration(labelText: 'عنوان النظام في الترويسة', border: OutlineInputBorder()),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      OutlinedButton.icon(
+                                        icon: const Icon(Icons.image_rounded),
+                                        label: const Text('رفع وتغيير شعار المؤسسة'),
+                                        onPressed: _uploadLogo,
+                                      ),
+                                      const SizedBox(width: 16),
+                                      if (_currentLogoUrl.isNotEmpty)
+                                        Text('الشعار مسجل: $_currentLogoUrl', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          CustomButton(label: 'حفظ بيانات الهوية', onPressed: _saveSettings),
+                        ],
+                      ),
+                    ),
+
+                    // تبويب 3: استثناء الأقسام (النقطة 5 و 7)
+                    ListView.separated(
+                      padding: const EdgeInsets.all(24),
+                      itemCount: _departments.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final dept = _departments[index];
+                        final isExcluded = dept['is_excluded'] == 1;
+
+                        return Card(
+                          child: SwitchListTile(
+                            title: Text(
+                              dept['name'],
+                              style: TextStyle(
+                                fontWeight: isExcluded ? FontWeight.normal : FontWeight.bold,
+                                color: isExcluded ? Colors.grey : AppColors.navy,
+                              ),
+                            ),
+                            subtitle: Text(
+                              isExcluded ? 'مستبعد من كشف الحضور والتقارير' : 'مشمول بكافة كشوفات الحضور',
+                              style: TextStyle(color: isExcluded ? AppColors.danger : AppColors.onTime, fontSize: 12),
+                            ),
+                            value: isExcluded,
+                            activeColor: AppColors.danger,
+                            onChanged: (val) async {
+                              try {
+                                await ApiClient.instance.put('/employees/departments/${dept['id']}/exclusion', {
+                                  'isExcluded': val,
+                                });
+                                _loadSettingsAndUsers();
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                              }
+                            },
+                          ),
+                        );
+                      },
+                    ),
+
+                    // تبويب 4: المستخدمون والصلاحيات (النقطة 15)
+                    Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('قائمة مستخدمي النظام ورتبهم', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
+                                icon: const Icon(Icons.person_add_rounded, size: 18),
+                                label: const Text('إضافة مستخدم'),
+                                onPressed: () => _showUserDialog(),
+                              ),
                             ],
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _users.length,
+                            separatorBuilder: (context, index) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final u = _users[index];
+                              final isSuper = u['role'] == 'SUPER_ADMIN';
+
+                              return Card(
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: isSuper ? AppColors.gold : AppColors.navy,
+                                    child: Icon(isSuper ? Icons.shield_rounded : Icons.person_rounded, color: Colors.white, size: 20),
+                                  ),
+                                  title: Text(
+                                    '${u['full_name']} (@${u['username']})',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  subtitle: Text(
+                                    'الدور: ${isSuper ? 'سوبر أدمن' : 'مدخل بيانات'}' +
+                                        (u['can_manage_exclusions'] == 1 ? ' • [صلاحية استثناء]' : '') +
+                                        (u['can_recommit'] == 1 ? ' • [صلاحية إعادة الاعتماد]' : ''),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // زر كشف كلمة المرور (👁️)
+                                      IconButton(
+                                        icon: const Icon(Icons.remove_red_eye_rounded, color: AppColors.navy),
+                                        tooltip: 'كشف كلمة المرور',
+                                        onPressed: () => _revealPassword(u['id'], u['username']),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_rounded, color: Colors.blueGrey),
+                                        tooltip: 'تعديل',
+                                        onPressed: () => _showUserDialog(u),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // تبويب 5: تصفير النظام والصيانة
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // بطاقة الصيانة والتعاميم
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('الصيانة وشريط التعاميم', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 12),
+                                  SwitchListTile(
+                                    title: const Text('وضع الصيانة (يمنع مدخلي البيانات من الدخول)'),
+                                    value: _maintenanceMode,
+                                    onChanged: (val) => setState(() => _maintenanceMode = val),
+                                  ),
+                                  const Divider(),
+                                  SwitchListTile(
+                                    title: const Text('تفعيل شريط التنبيهات والتعاميم العلوي'),
+                                    value: _bannerActive,
+                                    onChanged: (val) => setState(() => _bannerActive = val),
+                                  ),
+                                  if (_bannerActive)
+                                    TextField(
+                                      controller: _bannerTextController,
+                                      decoration: const InputDecoration(labelText: 'نص التعميم العلوي', border: OutlineInputBorder()),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // بطاقة تصفير النظام التحذيرية
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: AppColors.danger.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.warning_rounded, color: AppColors.danger, size: 28),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'منطقة الخطر: تصفير النظام وإعادة الضبط',
+                                      style: TextStyle(color: AppColors.danger, fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'تستخدم هذه العملية أثناء فترة التطوير والبناء أو عند بدء مرحلة جديدة تماماً، حيث تقوم بمسح كافة سجلات الحضور اليومية والأيام المعتمدة والإجازات وجداول الدوام مع بقاء حسابك وقوالب النظام سليمة. تتطلب العملية إدخال كلمة مرور السوبر أدمن للتأكيد.',
+                                  style: TextStyle(fontSize: 13, height: 1.5),
+                                ),
+                                const SizedBox(height: 20),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.danger,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  icon: const Icon(Icons.delete_forever_rounded, size: 20),
+                                  label: const Text('تصفير النظام وإعادة الضبط للبداية', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  onPressed: _resetDatabase,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
     );
   }
 }

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
-import '../../shared/custom_button.dart';
-import '../../tools/responsive.dart';
 import 'employee_dialog.dart';
 
-/// Hint: شاشة إدارة سجلات الموظفين ودليل المقر
+/// Hint: شاشة إدارة سجلات الموظفين ودليل المقر ونقل الموظفين (النقطة 16)
 class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({super.key});
 
@@ -18,13 +17,26 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   bool _isLoading = true;
   String? _error;
   List<dynamic> _employees = [];
+  List<dynamic> _departments = [];
   String _searchQuery = '';
   String? _selectedDept;
 
   @override
   void initState() {
     super.initState();
+    _loadDepartments();
     _loadEmployees();
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final res = await ApiClient.instance.get('/employees/departments');
+      if (res is List) {
+        setState(() {
+          _departments = res;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadEmployees() async {
@@ -55,12 +67,143 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     }
   }
 
+  // نقل الموظف بين الأقسام مع الأرشفة (النقطة 16)
+  void _showTransferDialog(Map<String, dynamic> emp) {
+    String? targetDept = _departments.isNotEmpty ? _departments.first['name'].toString() : '';
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
+                const SizedBox(width: 8),
+                Text('نقل الموظف: ${emp['name']}'),
+              ],
+            ),
+            content: SizedBox(
+              width: 450,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'القسم الحالي: ${emp['department']}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('القسم الجديد المراد النقل إليه:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: targetDept,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    items: _departments.map((d) {
+                      final name = d['name'].toString();
+                      return DropdownMenuItem<String>(
+                        value: name,
+                        child: Text(name),
+                      );
+                    }).toList(),
+                    onChanged: (val) => setDialogState(() => targetDept = val),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('سبب أو أمر النقل الإداري:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    decoration: InputDecoration(
+                      hintText: 'مثال: أمر إداري رقم 123 لسنة 2026...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
+                onPressed: targetDept == null || targetDept == emp['department']
+                    ? null
+                    : () async {
+                        Navigator.pop(ctx);
+                        setState(() => _isLoading = true);
+                        try {
+                          await ApiClient.instance.post('/employees/${emp['id']}/transfer', {
+                            'newDepartment': targetDept,
+                            'reason': reasonController.text.trim(),
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppColors.onTime,
+                              content: Text('تم نقل الموظف إلى قسم [$targetDept] بنجاح وتسجيل النقل في السجل!'),
+                            ),
+                          );
+                          _loadEmployees();
+                        } catch (e) {
+                          setState(() => _isLoading = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(backgroundColor: AppColors.danger, content: Text('فشل النقل: $e')),
+                          );
+                        }
+                      },
+                child: const Text('تأكيد النقل'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // استيراد الموظفين من ملف الإكسل الأساسي
+  Future<void> _importMasterEmployees() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx', 'xls'],
+      );
+
+      if (files.isNotEmpty) {
+        final file = files.first;
+        final bytes = await file.xFile.readAsBytes();
+
+        setState(() => _isLoading = true);
+        final res = await ApiClient.instance.uploadFile('/employees/import-excel', bytes, file.name);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.onTime,
+            content: Text(res['message'] ?? 'تم استيراد الموظفين بنجاح!'),
+          ),
+        );
+        _loadDepartments();
+        _loadEmployees();
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.danger, content: Text('فشل الاستيراد: $e')),
+      );
+    }
+  }
+
   void _showEmployeeDialog([Map<String, dynamic>? employee]) {
     showDialog(
       context: context,
       builder: (ctx) => EmployeeDialog(
         employee: employee,
-        onSaved: _loadEmployees,
+        onSaved: () {
+          _loadDepartments();
+          _loadEmployees();
+        },
       ),
     );
   }
@@ -95,53 +238,88 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = AuthProvider.instance;
-    final isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
       body: Column(
         children: [
-          // شريط البحث والعمليات
+          // شريط الأدوات العلوي
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+              color: Theme.of(context).cardTheme.color ?? Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
             ),
             child: Row(
               children: [
+                // مربع البحث
                 Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'بحث باسم الموظف، المعرف، أو الهاتف...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'بحث بالاسم، المعرف، أو الهاتف...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onChanged: (val) {
+                        _searchQuery = val;
+                        _loadEmployees();
+                      },
                     ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // فلتر القسم
+                SizedBox(
+                  width: 220,
+                  height: 40,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedDept,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    hint: const Text('كافة الأقسام', style: TextStyle(fontSize: 12)),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('كافة الأقسام', style: TextStyle(fontSize: 12))),
+                      ..._departments.map((d) => DropdownMenuItem(
+                            value: d['name'].toString(),
+                            child: Text(d['name'].toString(), style: const TextStyle(fontSize: 12)),
+                          )),
+                    ],
                     onChanged: (val) {
-                      _searchQuery = val.trim();
+                      setState(() => _selectedDept = val);
                       _loadEmployees();
                     },
                   ),
                 ),
-                const SizedBox(width: 14),
-                CustomButton(
-                  label: 'إضافة موظف',
-                  icon: Icons.person_add_rounded,
-                  onPressed: () => _showEmployeeDialog(),
-                ),
-              ],
-            ),
-          ),
+                const SizedBox(width: 12),
 
-          // عدد النتائج
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  'إجمالي الموظفين: ${_employees.length}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey),
-                ),
+                // أزرار السوبر أدمن
+                if (auth.isSuperAdmin) ...[
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.navy,
+                      side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                    ),
+                    icon: const Icon(Icons.upload_file_rounded, size: 18),
+                    label: const Text('استيراد من إكسل'),
+                    onPressed: _importMasterEmployees,
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.navy,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                    label: const Text('إضافة موظف'),
+                    onPressed: () => _showEmployeeDialog(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -150,97 +328,75 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _employees.isEmpty
-                    ? const Center(child: Text('لم يتم العثور على أي موظف'))
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        itemCount: _employees.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final emp = _employees[index];
-                          final isExempt = emp['is_exempt'] == 1 || emp['is_exempt'] == true;
-                          final status = emp['status'] ?? 'نشط';
+                : _error != null
+                    ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger)))
+                    : _employees.isEmpty
+                        ? const Center(child: Text('لا توجد سجلات مطابقة'))
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _employees.length,
+                            separatorBuilder: (context, index) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final emp = _employees[index];
+                              final isExempt = emp['is_exempt'] == 1;
 
-                          return Card(
-                            elevation: 0,
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: isExempt ? AppColors.goldBright.withOpacity(0.2) : AppColors.navy.withOpacity(0.1),
-                                child: Text(
-                                  '${emp['emp_code']}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isExempt ? AppColors.goldDark : AppColors.navy,
+                              return Card(
+                                elevation: 1,
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: AppColors.navy.withOpacity(0.1),
+                                    child: Text(
+                                      '${emp['emp_code']}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.navy, fontSize: 13),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              title: Row(
-                                children: [
-                                  Text(
-                                    emp['name'] ?? '',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                  ),
-                                  if (isExempt) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.goldDark.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.star_rounded, size: 12, color: AppColors.goldDark),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            emp['exempt_reason'] ?? 'مستثنى VIP',
-                                            style: const TextStyle(fontSize: 10, color: AppColors.goldDark, fontWeight: FontWeight.bold),
+                                  title: Row(
+                                    children: [
+                                      Text(emp['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      const SizedBox(width: 8),
+                                      if (isExempt)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.vipExempt.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(4),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  if (status != 'نشط') ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        status,
-                                        style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              subtitle: Text(
-                                '${emp['department']}${emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • ${emp['phone']}' : ''}',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined, size: 18),
-                                    tooltip: 'تعديل',
-                                    onPressed: () => _showEmployeeDialog(emp),
+                                          child: const Text('مستثنى VIP', style: TextStyle(fontSize: 10, color: AppColors.vipExempt, fontWeight: FontWeight.bold)),
+                                        ),
+                                    ],
                                   ),
-                                  if (auth.isSuperAdmin)
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.danger),
-                                      tooltip: 'حذف',
-                                      onPressed: () => _deleteEmployee(emp),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                                  subtitle: Text(
+                                    '${emp['department']} • الحالة: ${emp['status']}' +
+                                        (emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : ''),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: auth.isSuperAdmin
+                                      ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            // زر النقل بين الأقسام
+                                            IconButton(
+                                              icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
+                                              tooltip: 'نقل إلى قسم آخر',
+                                              onPressed: () => _showTransferDialog(emp),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.edit_rounded, color: Colors.blueGrey),
+                                              tooltip: 'تعديل البيانات',
+                                              onPressed: () => _showEmployeeDialog(emp),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                              tooltip: 'حذف',
+                                              onPressed: () => _deleteEmployee(emp),
+                                            ),
+                                          ],
+                                        )
+                                      : null,
+                                ),
+                              );
+                            },
+                          ),
           ),
         ],
       ),

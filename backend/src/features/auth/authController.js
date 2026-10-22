@@ -1,5 +1,5 @@
 /**
- * Hint: متحكم المصادقة وتسجيل الدخول وإدارة الجلسات
+ * Hint: متحكم المصادقة وتسجيل الدخول والملف الشخصي وتغيير الصورة وكلمة المرور (النقطة 14)
  */
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,6 +7,7 @@ const db = require('../../core/database');
 const { JWT_SECRET } = require('../../core/config');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
+const { encrypt } = require('../../core/cryptoHelper');
 
 function login(req, res) {
   const { username, password } = req.body;
@@ -42,7 +43,6 @@ function login(req, res) {
 
   logAction(user.id, user.full_name, 'تسجيل دخول ناجح', `تسجيل الدخول من ${clientIp}`, clientIp);
 
-  // جلب إعدادات التنبيه والصيانة لإرسالها فوراً مع بيانات الدخول
   const bannerSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_text');
   const bannerActiveSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_active');
   const maintenanceSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('maintenance_mode');
@@ -53,7 +53,10 @@ function login(req, res) {
       id: user.id,
       username: user.username,
       fullName: user.full_name,
-      role: user.role
+      role: user.role,
+      canManageExclusions: user.can_manage_exclusions === 1,
+      canRecommit: user.can_recommit === 1,
+      avatarUrl: user.avatar_url
     },
     systemStatus: {
       announcementBanner: bannerActiveSetting && bannerActiveSetting.value === 'true' ? (bannerSetting ? bannerSetting.value : '') : '',
@@ -63,37 +66,82 @@ function login(req, res) {
 }
 
 function getMe(req, res) {
-  const user = req.user;
-  return successResponse(res, { user });
+  const currentUser = db.prepare('SELECT id, username, full_name, role, can_manage_exclusions, can_recommit, avatar_url, is_active FROM users WHERE id = ?').get(req.user.id);
+  return successResponse(res, { user: currentUser });
 }
 
-function changePassword(req, res) {
-  const { oldPassword, newPassword } = req.body;
+/**
+ * تحديث الملف الشخصي للمستخدم الحالي (الاسم، كلمة المرور، الصورة)
+ */
+function updateProfile(req, res) {
+  const { fullName, avatarUrl, oldPassword, newPassword } = req.body;
   const user = req.user;
 
-  if (!oldPassword || !newPassword) {
-    return errorResponse(res, 'يرجى تقديم كلمة المرور الحالية والجديدة', 400);
+  const currentDbUser = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+  if (!currentDbUser) {
+    return errorResponse(res, 'المستخدم غير موجود', 404);
   }
 
-  if (newPassword.length < 6) {
-    return errorResponse(res, 'يجب ألا تقل كلمة المرور الجديدة عن 6 خانات', 400);
+  let updatedName = fullName ? fullName.trim() : currentDbUser.full_name;
+  let updatedAvatar = avatarUrl !== undefined ? avatarUrl : currentDbUser.avatar_url;
+
+  let query = 'UPDATE users SET full_name = ?, avatar_url = ?';
+  const params = [updatedName, updatedAvatar];
+
+  // إذا طلب تغيير كلمة المرور
+  if (newPassword) {
+    if (!oldPassword) {
+      return errorResponse(res, 'يرجى إدخال كلمة المرور الحالية لتأكيد التغيير', 400);
+    }
+    const isMatch = bcrypt.compareSync(oldPassword, currentDbUser.password_hash);
+    if (!isMatch) {
+      return errorResponse(res, 'كلمة المرور الحالية غير صحيحة', 400);
+    }
+    if (newPassword.trim().length < 6) {
+      return errorResponse(res, 'يجب ألا تقل كلمة المرور الجديدة عن 6 خانات', 400);
+    }
+
+    const newHash = bcrypt.hashSync(newPassword.trim(), 10);
+    const newEncrypted = encrypt(newPassword.trim());
+
+    query += ', password_hash = ?, encrypted_password = ?';
+    params.push(newHash, newEncrypted);
   }
 
-  const currentDbUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
-  const isMatch = bcrypt.compareSync(oldPassword, currentDbUser.password_hash);
-  if (!isMatch) {
-    return errorResponse(res, 'كلمة المرور الحالية غير صحيحة', 400);
+  query += ' WHERE id = ?';
+  params.push(user.id);
+
+  db.prepare(query).run(...params);
+
+  logAction(user.id, updatedName, 'تعديل الملف الشخصي', 'تم تحديث بيانات الملف الشخصي');
+
+  const refreshed = db.prepare('SELECT id, username, full_name, role, can_manage_exclusions, can_recommit, avatar_url FROM users WHERE id = ?').get(user.id);
+
+  return successResponse(res, refreshed, 'تم تحديث الملف الشخصي بنجاح');
+}
+
+/**
+ * رفع صورة شخصية لحساب المستخدم
+ */
+function uploadAvatar(req, res) {
+  const file = req.file;
+  const user = req.user;
+
+  if (!file) {
+    return errorResponse(res, 'يرجى اختيار صورة للرفع', 400);
   }
 
-  const newHash = bcrypt.hashSync(newPassword, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
+  const avatarUrl = `/uploads/avatars/${file.filename}`;
+  db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(avatarUrl, user.id);
 
-  logAction(user.id, user.full_name, 'تغيير كلمة المرور', 'تم تحديث كلمة المرور الشخصية');
-  return successResponse(res, null, 'تم تغيير كلمة المرور بنجاح');
+  logAction(user.id, user.full_name, 'تحديث الصورة الشخصية', `رفع صورة شخصية جديدة: ${avatarUrl}`);
+
+  return successResponse(res, { avatarUrl }, 'تم رفع وتحديث الصورة الشخصية بنجاح');
 }
 
 module.exports = {
   login,
   getMe,
-  changePassword
+  updateProfile,
+  uploadAvatar
 };

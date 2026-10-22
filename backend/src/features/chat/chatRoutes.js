@@ -4,10 +4,12 @@
 const express = require('express');
 const router = express.Router();
 const chatController = require('./chatController');
-const { authenticateToken } = require('../../core/authMiddleware');
+const { authenticateToken, requireSuperAdmin } = require('../../core/authMiddleware');
 
-router.get('/', authenticateToken, chatController.getMessages);
-router.post('/', authenticateToken, chatController.sendMessage);
+router.get('/conversations', authenticateToken, chatController.listConversations);
+router.get('/messages', authenticateToken, chatController.getMessages);
+router.post('/messages', authenticateToken, chatController.sendMessage);
+router.post('/groups', authenticateToken, requireSuperAdmin, chatController.createGroupChannel);
 router.get('/unread-count', authenticateToken, chatController.getUnreadCount);
 
 module.exports = router;

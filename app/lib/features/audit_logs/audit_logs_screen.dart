@@ -108,11 +108,13 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _logs.isEmpty
-                    ? const Center(child: Text('لا توجد حركات مسجلة تطابق البحث'))
-                    : isDesktop
-                        ? _buildDesktopTable()
-                        : _buildMobileList(),
+                : _error != null
+                    ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger)))
+                    : _logs.isEmpty
+                        ? const Center(child: Text('لا توجد حركات مسجلة تطابق البحث'))
+                        : isDesktop
+                            ? _buildDesktopTable()
+                            : _buildMobileList(),
           ),
         ],
       ),

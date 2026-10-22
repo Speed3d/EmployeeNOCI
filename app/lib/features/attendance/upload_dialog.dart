@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
-import '../../shared/custom_button.dart';
 
-/// Hint: نافذة رفع واستيراد ملف كشف البصمة اليومي (.xlsx)
+/// Hint: نافذة رفع وتحليل كشف البصمة اليومي (.xlsx)
+/// تدعم خياري: المعاينة فقط أو الحفظ والاعتماد المباشر (النقطة 8)
 class UploadAttendanceDialog extends StatefulWidget {
-  final VoidCallback onUploaded;
-  const UploadAttendanceDialog({super.key, required this.onUploaded});
+  final Function(Map<String, dynamic> previewData) onPreviewLoaded;
+  final VoidCallback onCommitted;
+
+  const UploadAttendanceDialog({
+    super.key,
+    required this.onPreviewLoaded,
+    required this.onCommitted,
+  });
 
   @override
   State<UploadAttendanceDialog> createState() => _UploadAttendanceDialogState();
@@ -18,7 +24,8 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
   String? _selectedFileName;
   Uint8List? _fileBytes;
   int? _fileSize;
-  bool _isUploading = false;
+  bool _isLoading = false;
+  String? _loadingAction;
   String? _error;
 
   Future<void> _pickFile() async {
@@ -45,38 +52,79 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
     }
   }
 
-  Future<void> _upload() async {
+  // إجراء 1: تحليل ومعاينة بدون حفظ
+  Future<void> _previewOnly() async {
     if (_fileBytes == null || _selectedFileName == null) {
       setState(() => _error = 'يرجى اختيار ملف الإكسل أولاً');
       return;
     }
 
     setState(() {
-      _isUploading = true;
+      _isLoading = true;
+      _loadingAction = 'جاري تحليل الملف للمعاينة...';
       _error = null;
     });
 
     try {
-      await ApiClient.instance.uploadFile(
-        '/attendance/upload',
+      final res = await ApiClient.instance.uploadFile(
+        '/attendance/preview',
         _fileBytes!,
         _selectedFileName!,
       );
 
       if (mounted) {
         Navigator.pop(context);
-        widget.onUploaded();
+        widget.onPreviewLoaded(res);
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  // إجراء 2: حفظ واعتماد مباشر
+  Future<void> _commitDirect() async {
+    if (_fileBytes == null || _selectedFileName == null) {
+      setState(() => _error = 'يرجى اختيار ملف الإكسل أولاً');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _loadingAction = 'جاري تحليل وحفظ واعتماد الكشف...';
+      _error = null;
+    });
+
+    try {
+      // أولاً نعاين لجلب التاريخ والبصمات
+      final previewRes = await ApiClient.instance.uploadFile(
+        '/attendance/preview',
+        _fileBytes!,
+        _selectedFileName!,
+      );
+
+      // ثم نرسل أمر الاعتماد
+      await ApiClient.instance.post('/attendance/commit', {
+        'date': previewRes['date'],
+        'punchList': previewRes['rawPunches'],
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onCommitted();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             backgroundColor: AppColors.onTime,
-            content: Text('تم استيراد وتحليل كشف البصمة بنجاح!'),
+            content: Text('تم اعتماد كشف تاريخ ${previewRes['date']} وحفظه في قاعدة البيانات بنجاح!'),
           ),
         );
       }
     } catch (e) {
       setState(() {
         _error = e.toString();
-        _isUploading = false;
+        _isLoading = false;
       });
     }
   }
@@ -92,56 +140,55 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
         ],
       ),
       content: SizedBox(
-        width: 450,
+        width: 480,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'اختر ملف الإكسل اليومي المستخرج من جهاز البصمة (مثل نموذج 20-10-2026.xlsx) لتحليله وتشخيصه فوراً:',
+              'اختر ملف البصمة اليومي (.xlsx) المسحوب من جهاز البصمة للبدء:',
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
             const SizedBox(height: 16),
 
             // منطقة اختيار الملف
             InkWell(
-              onTap: _isUploading ? null : _pickFile,
+              onTap: _isLoading ? null : _pickFile,
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.navy.withOpacity(0.04),
-                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _selectedFileName != null ? AppColors.onTime : AppColors.navy.withOpacity(0.3),
-                    style: BorderStyle.solid,
+                    color: _selectedFileName != null ? AppColors.onTime : Colors.grey.shade400,
                     width: 1.5,
                   ),
+                  borderRadius: BorderRadius.circular(12),
+                  color: _selectedFileName != null
+                      ? AppColors.onTime.withOpacity(0.05)
+                      : Colors.grey.shade50,
                 ),
                 child: Column(
                   children: [
                     Icon(
-                      _selectedFileName != null ? Icons.description_rounded : Icons.cloud_upload_outlined,
-                      size: 44,
+                      _selectedFileName != null ? Icons.check_circle_rounded : Icons.cloud_upload_outlined,
+                      size: 40,
                       color: _selectedFileName != null ? AppColors.onTime : AppColors.navy,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
-                      _selectedFileName ?? 'اضغط لاختيار ملف الإكسل (.xlsx)',
-                      textAlign: TextAlign.center,
+                      _selectedFileName ?? 'انقر هنا لاختيار ملف الإكسل',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                         color: _selectedFileName != null ? AppColors.onTime : AppColors.navy,
                       ),
+                      textAlign: TextAlign.center,
                     ),
-                    if (_fileSize != null) ...[
-                      const SizedBox(height: 4),
+                    if (_fileSize != null)
                       Text(
-                        'الحجم: ${(_fileSize! / 1024).toStringAsFixed(1)} كيلوبايت',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        'حجم الملف: ${(_fileSize! / 1024).toStringAsFixed(1)} كيلوبايت',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
-                    ],
                   ],
                 ),
               ),
@@ -149,21 +196,70 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
 
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: AppColors.danger, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            if (_isLoading) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 12),
+                  Text(_loadingAction ?? 'جاري المعالجة...', style: const TextStyle(fontSize: 13)),
+                ],
+              ),
             ],
           ],
         ),
       ),
+      actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       actions: [
         TextButton(
-          onPressed: _isUploading ? null : () => Navigator.pop(context),
+          onPressed: _isLoading ? null : () => Navigator.pop(context),
           child: const Text('إلغاء'),
         ),
-        CustomButton(
-          label: 'تحليل واعتماد الكشف',
-          icon: Icons.check_circle_outline_rounded,
-          isLoading: _isUploading,
-          onPressed: _fileBytes != null ? _upload : null,
+        const Spacer(),
+        // خيار 1: معاينة فقط
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.navy,
+            side: const BorderSide(color: AppColors.navy),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          icon: const Icon(Icons.visibility_rounded, size: 18),
+          label: const Text('تحليل ومعاينة فقط'),
+          onPressed: (_fileBytes == null || _isLoading) ? null : _previewOnly,
+        ),
+        const SizedBox(width: 8),
+        // خيار 2: حفظ واعتماد
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.onTime,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          icon: const Icon(Icons.check_circle_rounded, size: 18),
+          label: const Text('حفظ واعتماد'),
+          onPressed: (_fileBytes == null || _isLoading) ? null : _commitDirect,
         ),
       ],
     );

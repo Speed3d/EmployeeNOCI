@@ -8,6 +8,7 @@ import 'features/auth/login_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/attendance/attendance_screen.dart';
 import 'features/employees/employees_screen.dart';
+import 'features/schedules/schedules_screen.dart';
 import 'features/leaves/leaves_screen.dart';
 import 'features/reports/reports_screen.dart';
 import 'features/chat/chat_screen.dart';
@@ -40,7 +41,7 @@ class NociAttendanceApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
-          themeMode: ThemeMode.light, // الوضع الافتراضي نهاراً ويمكن تبديله
+          themeMode: ThemeMode.light,
           builder: (context, child) {
             return Directionality(
               textDirection: TextDirection.rtl,
@@ -73,6 +74,7 @@ class _AppShellState extends State<AppShell> {
     'لوحة المؤشرات العامة',
     'كشف الحضور والتشخيص اليومي',
     'سجل ودليل موظفي المقر',
+    'جداول الدوام والشفتات وأيام الراحة',
     'الإجازات والأذونات والعطل الرسمية',
     'التقارير التراكمية الشهرية',
     'المحادثة الإدارية المباشرة',
@@ -86,6 +88,7 @@ class _AppShellState extends State<AppShell> {
       DashboardScreen(onNavigate: (index) => setState(() => _selectedIndex = index)),
       const AttendanceScreen(),
       const EmployeesScreen(),
+      const SchedulesScreen(),
       const LeavesScreen(),
       const ReportsScreen(),
       const ChatScreen(),
@@ -93,7 +96,6 @@ class _AppShellState extends State<AppShell> {
       const SettingsScreen(),
     ];
 
-    // حماية المؤشر إن كان خارج النطاق
     final safeIndex = _selectedIndex < screens.length ? _selectedIndex : 0;
 
     return MainLayout(

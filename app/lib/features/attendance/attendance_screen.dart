@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
+import '../../core/auth_provider.dart';
+import '../../core/constants.dart';
 import '../../shared/status_badge.dart';
-import '../../tools/responsive.dart';
 import '../../tools/date_formatter.dart';
 import 'upload_dialog.dart';
 
-/// Hint: شاشة كشف البصمة اليومي والتحليل والتشخيص اللوني الذكي
+/// Hint: شاشة كشف البصمة اليومي والتحليل والمعاينة والاعتماد (الإصدار الثاني المعتمد)
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
 
@@ -16,18 +17,25 @@ class AttendanceScreen extends StatefulWidget {
 }
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
-  DateTime _selectedDate = DateTime(2026, 10, 20); // تاريخ العينة الافتراضي
+  // النقطة 3: التاريخ الافتراضي = تاريخ الحاسوب الحالي
+  DateTime _selectedDate = DateTime.now();
   bool _isLoading = true;
   String? _error;
 
-  Map<String, dynamic>? _stats;
   List<dynamic> _records = [];
-  List<String> _departments = [];
+  List<dynamic> _allDepartments = [];
 
   String _searchQuery = '';
   String? _selectedDept;
   String? _selectedStatus;
-  final Set<String> _excludedDepts = {};
+
+  // النقطة 8: متغيرات وضع المعاينة المؤقتة
+  bool _isPreviewMode = false;
+  List<dynamic>? _previewPunches;
+  String? _previewDate;
+  bool _isCommitted = false;
+  String? _committedByName;
+  String? _committedAt;
 
   @override
   void initState() {
@@ -41,7 +49,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final res = await ApiClient.instance.get('/employees/departments');
       if (res is List) {
         setState(() {
-          _departments = res.map((d) => d['name'].toString()).toList();
+          _allDepartments = res;
         });
       }
     } catch (_) {}
@@ -51,6 +59,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _isPreviewMode = false;
     });
 
     try {
@@ -66,14 +75,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       if (_searchQuery.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(_searchQuery)}';
       }
-      if (_excludedDepts.isNotEmpty) {
-        url += '&excludeDepts=${_excludedDepts.map((d) => Uri.encodeComponent(d)).join(',')}';
-      }
 
       final res = await ApiClient.instance.get(url);
       setState(() {
-        _stats = res['stats'];
         _records = res['records'] ?? [];
+        _isCommitted = res['isCommitted'] ?? false;
+        _committedByName = res['committedByName'];
+        _committedAt = res['committedAt'];
         _isLoading = false;
       });
     } catch (e) {
@@ -82,6 +90,71 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  // تفعيل وضع المعاينة القادم من نافذة الرفع
+  void _onPreviewLoaded(Map<String, dynamic> previewData) {
+    setState(() {
+      _isPreviewMode = true;
+      _previewDate = previewData['date'];
+      _previewPunches = previewData['rawPunches'];
+      _records = previewData['records'] ?? [];
+      _isCommitted = previewData['isCommitted'] ?? false;
+      _isLoading = false;
+    });
+  }
+
+  // حفظ واعتماد الكشف المعاين
+  Future<void> _commitPreviewedAttendance() async {
+    if (_previewDate == null || _previewPunches == null) return;
+
+    final auth = AuthProvider.instance;
+    if (_isCommitted && !auth.canRecommit) {
+      _showErrorDialog('تنبيه الاعتماد', 'هذا اليوم معتمد مسبقاً، وإعادة الاعتماد تتطلب صلاحية خاصة من السوبر أدمن.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await ApiClient.instance.post('/attendance/commit', {
+        'date': _previewDate,
+        'punchList': _previewPunches,
+      });
+
+      setState(() => _isPreviewMode = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم اعتماد كشف تاريخ $_previewDate وحفظه رسمياً بنجاح!'),
+        ),
+      );
+      _loadDailyAttendance();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorDialog('فشل الاعتماد', e.toString());
+    }
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
+            const SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('حسناً'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _changeDate(int days) {
@@ -104,117 +177,225 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
+  // النقطة 4: تصدير الإكسل المباشر الفعال
   Future<void> _exportExcel() async {
-    final dateStr = DateFormatter.toYmd(_selectedDate);
-    final url = '${ApiClient.instance.baseUrl}/reports/export-daily-excel?date=$dateStr';
+    final dateStr = _isPreviewMode ? (_previewDate ?? DateFormatter.toYmd(_selectedDate)) : DateFormatter.toYmd(_selectedDate);
+    final token = ApiClient.instance.token ?? '';
+    final url = '${ApiClient.instance.baseUrl}/reports/export-daily?date=$dateStr&token=$token';
     final uri = Uri.parse(url);
+
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر فتح رابط التصدير')),
+        const SnackBar(content: Text('تعذر فتح رابط تصدير الإكسل')),
       );
     }
   }
 
+  // النقطة 5: نافذة استثناء الأقسام
   void _showExcludeDeptsDialog() {
+    final auth = AuthProvider.instance;
+    if (!auth.canManageExclusions) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.danger,
+          content: Text('تعديل استثناء الأقسام محصور بالسوبر أدمن أو من يملك صلاحية الاستثناءات'),
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              title: const Text('استثناء أقسام معينة من الكشف والغياب'),
-              content: SizedBox(
-                width: 400,
-                height: 350,
-                child: ListView.builder(
-                  itemCount: _departments.length,
-                  itemBuilder: (context, index) {
-                    final dept = _departments[index];
-                    final isExcluded = _excludedDepts.contains(dept);
-
-                    return CheckboxListTile(
-                      title: Text(dept, style: const TextStyle(fontSize: 13)),
-                      value: isExcluded,
-                      onChanged: (val) {
-                        setModalState(() {
-                          if (val == true) {
-                            _excludedDepts.add(dept);
-                          } else {
-                            _excludedDepts.remove(dept);
-                          }
-                        });
-                      },
-                    );
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _excludedDepts.clear();
-                    Navigator.pop(ctx);
-                    _loadDailyAttendance();
-                  },
-                  child: const Text('إلغاء الاستثناءات'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _loadDailyAttendance();
-                  },
-                  child: const Text('تطبيق الفلتر'),
-                ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.filter_alt_off_rounded, color: AppColors.navy),
+                SizedBox(width: 8),
+                Text('إدارة استثناء الأقسام من الكشوفات'),
               ],
-            );
-          },
-        );
-      },
+            ),
+            content: SizedBox(
+              width: 500,
+              height: 400,
+              child: _allDepartments.isEmpty
+                  ? const Center(child: Text('لا توجد أقسام مسجلة'))
+                  : ListView.separated(
+                      itemCount: _allDepartments.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final dept = _allDepartments[index];
+                        final isExcluded = dept['is_excluded'] == 1;
+                        return SwitchListTile(
+                          title: Text(
+                            dept['name'],
+                            style: TextStyle(
+                              fontWeight: isExcluded ? FontWeight.normal : FontWeight.bold,
+                              color: isExcluded ? Colors.grey : AppColors.navy,
+                            ),
+                          ),
+                          subtitle: Text(
+                            isExcluded ? 'مستبعد من الحضور والتقارير' : 'مشمول بالبصمة',
+                            style: TextStyle(fontSize: 12, color: isExcluded ? AppColors.danger : AppColors.onTime),
+                          ),
+                          value: isExcluded,
+                          activeColor: AppColors.danger,
+                          onChanged: (val) async {
+                            try {
+                              await ApiClient.instance.put('/employees/departments/${dept['id']}/exclusion', {
+                                'isExcluded': val,
+                              });
+                              setDialogState(() {
+                                dept['is_excluded'] = val ? 1 : 0;
+                              });
+                              _loadDepartments();
+                              _loadDailyAttendance();
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('خطأ: $e')),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إغلاق'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = Responsive.isDesktop(context);
+    final currentDateStr = _isPreviewMode ? (_previewDate ?? '') : DateFormatter.toYmd(_selectedDate);
+
+    // تطبيق الفلترة المحلية السريعة
+    final displayedRecords = _records.where((r) {
+      if (_selectedDept != null && _selectedDept!.isNotEmpty && r['department'] != _selectedDept) {
+        return false;
+      }
+      if (_selectedStatus != null && _selectedStatus!.isNotEmpty && r['status'] != _selectedStatus) {
+        return false;
+      }
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final name = (r['name'] ?? '').toString().toLowerCase();
+        final code = (r['emp_code'] ?? '').toString().toLowerCase();
+        if (!name.contains(q) && !code.contains(q)) return false;
+      }
+      return true;
+    }).toList();
 
     return Scaffold(
       body: Column(
         children: [
-          // 1. شريط التاريخ والعمليات الأساسية
+          // شريط المعاينة والاعتماد التحذيري البارز
+          if (_isPreviewMode)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              color: Colors.amber.shade700,
+              child: Row(
+                children: [
+                  const Icon(Icons.visibility_rounded, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'أنت الآن في وضع المعاينة المؤقتة لكشف تاريخ [$_previewDate] (لم يتم حفظه في القاعدة بعد ولن يظهر بالتقارير إلا بعد اعتماده)',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.onTime,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.check_circle_rounded, size: 18),
+                    label: const Text('حفظ واعتماد الكشف الآن', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: _commitPreviewedAttendance,
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('إلغاء المعاينة'),
+                    onPressed: () {
+                      setState(() => _isPreviewMode = false);
+                      _loadDailyAttendance();
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+          // شريط حالة الاعتماد في الأيام المسجلة
+          if (!_isPreviewMode && _isCommitted)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              color: AppColors.onTime.withOpacity(0.12),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, color: AppColors.onTime, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'هذا الكشف معتمد رسمياً' +
+                        (_committedByName != null ? ' بواسطة [$_committedByName]' : '') +
+                        (_committedAt != null ? ' بتاريخ $_committedAt' : ''),
+                    style: const TextStyle(color: AppColors.onTime, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+
+          // الشريط العلوي للأدوات والفلاتر والتحكم
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+              color: Theme.of(context).cardTheme.color ?? Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
             ),
             child: Wrap(
-              spacing: 12,
+              spacing: 10,
               runSpacing: 10,
-              alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
               children: [
-                // أدوات اختيار التاريخ
+                // محدد التاريخ والأسهم
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.chevron_right_rounded),
                       tooltip: 'اليوم السابق',
-                      onPressed: () => _changeDate(-1),
+                      onPressed: _isPreviewMode ? null : () => _changeDate(-1),
                     ),
                     InkWell(
-                      onTap: _selectDate,
+                      onTap: _isPreviewMode ? null : _selectDate,
                       borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.navy.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.event_rounded, size: 20, color: AppColors.navy),
+                            const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.navy),
                             const SizedBox(width: 8),
                             Text(
-                              DateFormatter.toArabicDate(DateFormatter.toYmd(_selectedDate)),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              DateFormatter.toArabicDate(currentDateStr),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                           ],
                         ),
@@ -223,41 +404,53 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     IconButton(
                       icon: const Icon(Icons.chevron_left_rounded),
                       tooltip: 'اليوم التالي',
-                      onPressed: () => _changeDate(1),
+                      onPressed: _isPreviewMode ? null : () => _changeDate(1),
                     ),
                   ],
                 ),
 
-                // أزرار العمليات (رفع كشف، استثناء أقسام، تصدير)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                // أزرار العمليات الرئيسية
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // زر استثناء الأقسام
                     OutlinedButton.icon(
-                      icon: const Icon(Icons.filter_list_off_rounded, size: 16),
-                      label: Text(
-                        _excludedDepts.isEmpty ? 'استثناء أقسام' : 'استثناء (${_excludedDepts.length})',
-                        style: const TextStyle(fontSize: 12),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.navy,
+                        side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
                       ),
+                      icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+                      label: const Text('استثناء أقسام'),
                       onPressed: _showExcludeDeptsDialog,
                     ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.table_view_rounded, size: 16, color: Colors.green),
-                      label: const Text('تصدير إكسل', style: TextStyle(fontSize: 12)),
-                      onPressed: _exportExcel,
-                    ),
+                    const SizedBox(width: 8),
+
+                    // زر تصدير الإكسل
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.action(context),
-                        foregroundColor: AppColors.onAction(context),
+                        backgroundColor: AppColors.onTime,
+                        foregroundColor: Colors.white,
                       ),
-                      icon: const Icon(Icons.upload_file_rounded, size: 16),
-                      label: const Text('رفع كشف البصمة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('تصدير إكسل'),
+                      onPressed: _exportExcel,
+                    ),
+                    const SizedBox(width: 8),
+
+                    // زر رفع الكشف اليومي
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.navy,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.cloud_upload_rounded, size: 16),
+                      label: const Text('رفع كشف البصمة'),
                       onPressed: () {
                         showDialog(
                           context: context,
                           builder: (ctx) => UploadAttendanceDialog(
-                            onUploaded: _loadDailyAttendance,
+                            onPreviewLoaded: _onPreviewLoaded,
+                            onCommitted: _loadDailyAttendance,
                           ),
                         );
                       },
@@ -268,294 +461,168 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
 
-          // 2. شريط ملخص الإحصائيات السريعة لليوم
-          if (_stats != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              color: AppColors.navy.withOpacity(0.04),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildStatPill('إجمالي:', '${_stats!['total']}', Colors.black87),
-                    const SizedBox(width: 12),
-                    _buildStatPill('حضور:', '${_stats!['present']}', AppColors.onTime),
-                    const SizedBox(width: 12),
-                    _buildStatPill('في الوقت:', '${_stats!['onTime']}', AppColors.onTime),
-                    const SizedBox(width: 12),
-                    _buildStatPill('متأخرون:', '${_stats!['late'] + _stats!['veryLate']}', AppColors.late),
-                    const SizedBox(width: 12),
-                    _buildStatPill('غياب تام:', '${_stats!['absent']}', AppColors.absent),
-                    const SizedBox(width: 12),
-                    _buildStatPill('إجازات:', '${_stats!['onLeave']}', AppColors.onLeave),
-                    const SizedBox(width: 12),
-                    _buildStatPill('VIP:', '${_stats!['vipExempt']}', AppColors.vipExempt),
-                  ],
-                ),
-              ),
-            ),
-
-          // 3. شريط الفلاتر والبحث
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
+          // شريط الفلاتر والبحث
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: Theme.of(context).cardTheme.color?.withOpacity(0.5) ?? Colors.grey.shade50,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Expanded(
-                  flex: 3,
+                // البحث بالاسم أو الكود
+                SizedBox(
+                  width: 220,
+                  height: 38,
                   child: TextField(
                     decoration: InputDecoration(
-                      hintText: 'بحث باسم الموظف أو المعرف...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      hintText: 'بحث بالاسم أو المعرف...',
+                      hintStyle: const TextStyle(fontSize: 12),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    onChanged: (val) {
-                      _searchQuery = val.trim();
-                      _loadDailyAttendance();
-                    },
+                    onChanged: (val) => setState(() => _searchQuery = val),
                   ),
                 ),
-                const SizedBox(width: 12),
-                if (isDesktop) ...[
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedDept,
-                      isDense: true,
-                      decoration: InputDecoration(
-                        labelText: 'القسم',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('كافة الأقسام')),
-                        ..._departments.map((d) => DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis))),
-                      ],
-                      onChanged: (val) {
-                        setState(() => _selectedDept = val);
-                        _loadDailyAttendance();
-                      },
+
+                // فلتر القسم
+                SizedBox(
+                  width: 200,
+                  height: 38,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedDept,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
+                    hint: const Text('كافة الأقسام', style: TextStyle(fontSize: 12)),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('كافة الأقسام', style: TextStyle(fontSize: 12))),
+                      ..._allDepartments
+                          .where((d) => d['is_excluded'] == 0) // إخفاء الأقسام المستبعدة تماماً
+                          .map((d) => DropdownMenuItem(
+                                value: d['name'].toString(),
+                                child: Text(d['name'].toString(), style: const TextStyle(fontSize: 12)),
+                              )),
+                    ],
+                    onChanged: (val) => setState(() => _selectedDept = val),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedStatus,
-                      isDense: true,
-                      decoration: InputDecoration(
-                        labelText: 'الحالة',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: null, child: Text('كافة الحالات')),
-                        DropdownMenuItem(value: 'ON_TIME', child: Text('في الوقت')),
-                        DropdownMenuItem(value: 'LATE', child: Text('تأخير بسيط')),
-                        DropdownMenuItem(value: 'VERY_LATE', child: Text('تأخير كبير')),
-                        DropdownMenuItem(value: 'ABSENT', child: Text('غائب')),
-                        DropdownMenuItem(value: 'ON_LEAVE', child: Text('مجاز')),
-                        DropdownMenuItem(value: 'VIP_EXEMPT', child: Text('مستثنى VIP')),
-                      ],
-                      onChanged: (val) {
-                        setState(() => _selectedStatus = val);
-                        _loadDailyAttendance();
-                      },
+                ),
+
+                // فلتر الحالة (حذف مستثنى VIP والأقسام المستبعدة بناء على النقطة 7)
+                SizedBox(
+                  width: 170,
+                  height: 38,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedStatus,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
+                    hint: const Text('كافة الحالات', style: TextStyle(fontSize: 12)),
+                    items: const [
+                      DropdownMenuItem(value: '', child: Text('كافة الحالات', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'ON_TIME', child: Text('حضور نظامي (أخضر)', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'LATE', child: Text('تأخير بسيط (أصفر)', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'VERY_LATE', child: Text('تأخير كبير (برتقالي)', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'EARLY_LEAVE', child: Text('انصراف مبكر', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'ABSENT', child: Text('غائب (أحمر)', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'ON_LEAVE', child: Text('مجاز رسمي', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'OFF_DAY', child: Text('يوم راحة', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'HOLIDAY', child: Text('عطلة رسمية', style: TextStyle(fontSize: 12))),
+                    ],
+                    onChanged: (val) => setState(() => _selectedStatus = val),
                   ),
-                ],
+                ),
+
+                // عداد السجلات الظاهرة
+                Text(
+                  'النتائج: ${displayedRecords.length} موظف',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.navy),
+                ),
               ],
             ),
           ),
 
-          // 4. جدول السجلات (Desktop) أو كروت تفاعلية (Mobile)
+          // جدول كشف الحضور الرئيسي
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _records.isEmpty
-                    ? const Center(child: Text('لا توجد سجلات تطابق البحث في هذا اليوم'))
-                    : isDesktop
-                        ? _buildDesktopTable()
-                        : _buildMobileCardsList(),
+                : _error != null
+                    ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger)))
+                    : displayedRecords.isEmpty
+                        ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.inbox_rounded, size: 48, color: Colors.grey),
+                                SizedBox(height: 12),
+                                Text('لا توجد بيانات مسجلة لهذا التاريخ أو الفلتر المختار'),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: displayedRecords.length,
+                            separatorBuilder: (context, index) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final r = displayedRecords[index];
+                              final status = r['status'] ?? 'ABSENT';
+                              final statusColor = AppConstants.getStatusColor(status);
+
+                              return Container(
+                                color: index % 2 == 0 ? Colors.transparent : Colors.grey.withOpacity(0.02),
+                                child: ListTile(
+                                  dense: true,
+                                  leading: CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: statusColor.withOpacity(0.12),
+                                    child: Text(
+                                      '${r['emp_code']}',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: statusColor),
+                                    ),
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Text(
+                                        r['name'] ?? '',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '(${r['department'] ?? ''})',
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Row(
+                                    children: [
+                                      Text(
+                                        'الدخول: ${DateFormatter.formatTime12h(r['first_punch'])}  |  الخروج: ${DateFormatter.formatTime12h(r['last_punch'])}',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      if (r['notes'] != null && r['notes'].toString().isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '• ${r['notes']}',
+                                            style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  trailing: StatusBadge(status: status),
+                                ),
+                              );
+                            },
+                          ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatPill(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 4),
-          Text(value, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDesktopTable() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            headingRowColor: MaterialStateProperty.all(AppColors.navy.withOpacity(0.06)),
-            columns: const [
-              DataColumn(label: Text('المعرف', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('الاسم', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('القسم', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('وقت الحضور (الدخول)', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('وقت الانصراف (الخروج)', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('الحالة', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('التأخير / الإضافي', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('الملاحظات والتشخيص', style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: _records.map((r) {
-              final status = r['status'] ?? 'ABSENT';
-              final firstPunch = r['first_punch'];
-              final lastPunch = r['last_punch'];
-              final lateMin = r['late_minutes'] ?? 0;
-              final overtimeMin = r['overtime_minutes'] ?? 0;
-              final bonusEarlyMin = r['early_bonus_minutes'] ?? 0;
-
-              // تلوين خلية الدخول بدقة
-              Color entryBg = Colors.transparent;
-              if (status == 'LATE') {
-                entryBg = AppColors.late.withOpacity(0.15); // أصفر
-              } else if (status == 'VERY_LATE') {
-                entryBg = AppColors.veryLate.withOpacity(0.18); // برتقالي
-              } else if (status == 'ON_TIME') {
-                entryBg = AppColors.onTime.withOpacity(0.1); // أخضر
-              } else if (status == 'ABSENT') {
-                entryBg = AppColors.absent.withOpacity(0.1); // أحمر
-              }
-
-              return DataRow(
-                cells: [
-                  DataCell(Text('${r['emp_code']}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                  DataCell(Text(r['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
-                  DataCell(Text(r['department'] ?? '')),
-                  DataCell(
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: entryBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        DateFormatter.formatTime12h(firstPunch),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: status == 'ABSENT' ? AppColors.absent : null,
-                        ),
-                      ),
-                    ),
-                  ),
-                  DataCell(Text(DateFormatter.formatTime12h(lastPunch))),
-                  DataCell(StatusBadge(status: status)),
-                  DataCell(
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (lateMin > 0)
-                          Text('تأخير: $lateMin د', style: const TextStyle(color: AppColors.late, fontSize: 11, fontWeight: FontWeight.bold)),
-                        if (overtimeMin > 0)
-                          Text('إضافي: +$overtimeMin د', style: const TextStyle(color: AppColors.onTime, fontSize: 11, fontWeight: FontWeight.bold)),
-                        if (bonusEarlyMin > 0)
-                          Text('مبكر: +$bonusEarlyMin د ⭐', style: const TextStyle(color: AppColors.goldDark, fontSize: 11, fontWeight: FontWeight.bold)),
-                        if (lateMin == 0 && overtimeMin == 0 && bonusEarlyMin == 0)
-                          const Text('-', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 250),
-                      child: Text(
-                        r['notes'] ?? '',
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMobileCardsList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _records.length,
-      itemBuilder: (context, index) {
-        final r = _records[index];
-        final status = r['status'] ?? 'ABSENT';
-        final lateMin = r['late_minutes'] ?? 0;
-        final overtimeMin = r['overtime_minutes'] ?? 0;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppColors.navy.withOpacity(0.1),
-                      child: Text(
-                        '${r['emp_code']}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.navy),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(r['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text(r['department'] ?? '', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                        ],
-                      ),
-                    ),
-                    StatusBadge(status: status),
-                  ],
-                ),
-                const Divider(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('الدخول: ${DateFormatter.formatTime12h(r['first_punch'])}', style: const TextStyle(fontSize: 12)),
-                    Text('الخروج: ${DateFormatter.formatTime12h(r['last_punch'])}', style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-                if (lateMin > 0 || overtimeMin > 0 || (r['notes'] != null && r['notes'].toString().isNotEmpty)) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    r['notes'] ?? '',
-                    style: TextStyle(fontSize: 11, color: lateMin > 0 ? AppColors.late : Colors.grey),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }

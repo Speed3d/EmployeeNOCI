@@ -1,5 +1,9 @@
 /**
- * Hint: متحكم التقارير الشاملة وتصدير ملفات الإكسل (Excel Reports)
+ * Hint: متحكم التقارير الشاملة الشهرية وتصدير ملفات الإكسل (الإصدار الثاني المعتمد)
+ * يضمن:
+ * 1. احتساب الأيام المعتمدة حصرياً (Committed Days Only) في التقارير الشهرية
+ * 2. إخفاء الأقسام والموظفين المستبعدين إدارياً تماماً
+ * 3. توفير نقطة تصدير عامة مرنة تستقبل الصفوف والأعمدة وتنتج ملف xlsx حقيقي
  */
 const xlsx = require('xlsx');
 const db = require('../../core/database');
@@ -7,7 +11,7 @@ const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
 
 /**
- * تقرير الكشف التراكمي الشهري للموظفين
+ * تقرير الكشف التراكمي الشهري للموظفين (الأيام المعتمدة فقط)
  */
 function getMonthlyTimesheet(req, res) {
   const { year, month, department } = req.query;
@@ -19,9 +23,16 @@ function getMonthlyTimesheet(req, res) {
   const paddedMonth = String(month).padStart(2, '0');
   const monthPrefix = `${year}-${paddedMonth}-%`;
 
+  // جلب الأيام المعتمدة فعلياً في هذا الشهر
+  const committedDays = db.prepare(`
+    SELECT date FROM attendance_days 
+    WHERE date LIKE ? AND status = 'COMMITTED'
+    ORDER BY date ASC
+  `).all(monthPrefix).map(d => d.date);
+
   let query = `
     SELECT 
-      e.id as employee_id, e.emp_code, e.name, e.department, e.status as emp_status, e.is_exempt,
+      e.id as employee_id, e.emp_code, e.name, e.department, e.status as emp_status,
       COUNT(CASE WHEN a.status IN ('ON_TIME', 'LATE', 'VERY_LATE', 'EARLY_LEAVE') THEN 1 END) as days_present,
       COUNT(CASE WHEN a.status = 'ON_TIME' THEN 1 END) as days_on_time,
       COUNT(CASE WHEN a.status = 'LATE' THEN 1 END) as days_late,
@@ -32,10 +43,15 @@ function getMonthlyTimesheet(req, res) {
       SUM(COALESCE(a.overtime_minutes, 0)) as total_overtime_minutes,
       COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as days_absent,
       COUNT(CASE WHEN a.status = 'ON_LEAVE' THEN 1 END) as days_on_leave,
-      COUNT(CASE WHEN a.status = 'VIP_EXEMPT' THEN 1 END) as days_exempt
+      COUNT(CASE WHEN a.status = 'OFF_DAY' THEN 1 END) as days_off,
+      COUNT(CASE WHEN a.status = 'HOLIDAY' THEN 1 END) as days_holiday
     FROM employees e
-    LEFT JOIN attendance_records a ON a.employee_id = e.id AND a.date LIKE ?
-    WHERE 1=1
+    LEFT JOIN attendance_records a ON a.employee_id = e.id 
+      AND a.date LIKE ? 
+      AND a.date IN (SELECT date FROM attendance_days WHERE status = 'COMMITTED')
+    WHERE e.status = 'نشط' 
+      AND e.is_exempt = 0 
+      AND e.department NOT IN (SELECT name FROM departments WHERE is_excluded = 1)
   `;
   const params = [monthPrefix];
 
@@ -51,16 +67,49 @@ function getMonthlyTimesheet(req, res) {
   return successResponse(res, {
     year: parseInt(year, 10),
     month: parseInt(month, 10),
+    committedDaysCount: committedDays.length,
+    committedDays,
     totalEmployees: report.length,
     report
   });
 }
 
 /**
- * تصدير كشف الحضور اليومي كملف Excel منسق
+ * تصدير ملف إكسل عام مرن (يعمل في كافة المنصات والمتصفحات)
+ */
+function exportGenericExcel(req, res) {
+  const { title = 'تقرير', fileName = 'Report', headers = [], rows = [] } = req.body;
+  const user = req.user;
+
+  try {
+    const wb = xlsx.utils.book_new();
+
+    // دمج الرؤوس مع الصفوف
+    const sheetData = [headers, ...rows];
+    const ws = xlsx.utils.aoa_to_sheet(sheetData);
+
+    // تفعيل اتجاه اليمين لليسار RTL
+    ws['!views'] = [{ rightToLeft: true }];
+    xlsx.utils.book_append_sheet(wb, ws, title.substring(0, 30));
+
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    logAction(user.id, user.full_name, 'تصدير إكسل', `تصدير ملف [${fileName}] (${rows.length} صف)`);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}.xlsx"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error('خطأ أثناء إنشاء ملف الإكسل:', err);
+    return errorResponse(res, 'فشل في تصدير ملف الإكسل: ' + err.message, 500);
+  }
+}
+
+/**
+ * تصدير كشف الحضور اليومي كملف Excel برابط مباشر
  */
 function exportDailyExcel(req, res) {
-  const { date, department, status, excludeDepts } = req.query;
+  const { date, department, status } = req.query;
   const user = req.user;
 
   if (!date) {
@@ -81,8 +130,8 @@ function exportDailyExcel(req, res) {
         WHEN a.status = 'EARLY_LEAVE' THEN 'انصراف مبكر'
         WHEN a.status = 'ABSENT' THEN 'غائب'
         WHEN a.status = 'ON_LEAVE' THEN 'مجاز'
-        WHEN a.status = 'VIP_EXEMPT' THEN 'مستثنى VIP'
-        WHEN a.status = 'DEPT_EXCLUDED' THEN 'قسم مستبعد'
+        WHEN a.status = 'OFF_DAY' THEN 'يوم راحة'
+        WHEN a.status = 'HOLIDAY' THEN 'عطلة رسمية'
         ELSE a.status
       END as 'الحالة',
       COALESCE(a.late_minutes, 0) as 'دقائق التأخير',
@@ -93,6 +142,9 @@ function exportDailyExcel(req, res) {
     FROM attendance_records a
     JOIN employees e ON e.id = a.employee_id
     WHERE a.date = ?
+      AND e.status = 'نشط'
+      AND e.is_exempt = 0
+      AND e.department NOT IN (SELECT name FROM departments WHERE is_excluded = 1)
   `;
   const params = [date];
 
@@ -106,28 +158,18 @@ function exportDailyExcel(req, res) {
     params.push(status);
   }
 
-  if (excludeDepts) {
-    const excludedList = Array.isArray(excludeDepts) ? excludeDepts : excludeDepts.split(',');
-    const placeholders = excludedList.map(() => '?').join(',');
-    query += ` AND e.department NOT IN (${placeholders})`;
-    params.push(...excludedList);
-  }
-
   query += ' ORDER BY CAST(e.emp_code AS INTEGER) ASC';
 
   const rows = db.prepare(query).all(...params);
 
-  // بناء مصنف إكسل عبر xlsx
   const wb = xlsx.utils.book_new();
   const ws = xlsx.utils.json_to_sheet(rows);
-
-  // ضبط اتجاه الورقة من اليمين لليسار RTL
   ws['!views'] = [{ rightToLeft: true }];
   xlsx.utils.book_append_sheet(wb, ws, `كشف ${date}`);
 
   const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-  logAction(user.id, user.full_name, 'تصدير كشف إكسل', `تصدير كشف الحضور ليوم ${date} (${rows.length} سجل)`);
+  logAction(user.id, user.full_name, 'تصدير كشف إكسل يومي', `تصدير كشف ${date} (${rows.length} موظف)`);
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="Attendance_${date}.xlsx"`);
@@ -136,5 +178,6 @@ function exportDailyExcel(req, res) {
 
 module.exports = {
   getMonthlyTimesheet,
+  exportGenericExcel,
   exportDailyExcel
 };
