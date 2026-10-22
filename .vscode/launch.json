@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "⚡ تشغيل فلاتر (تطوير ومراقبة الأخطاء في Debug Console)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app",
+      "program": "${workspaceFolder}/app/lib/main.dart",
+      "args": [
+        "-d",
+        "chrome",
+        "--web-port=8080"
+      ]
+    },
+    {
+      "name": "🏛️ تشغيل خادم النظام الخلفي (Node.js API - Port 5000)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/src/app.js",
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "🚀 تشغيل النظام المتكامل (الخلفية + واجهة فلاتر مع Debug Console)",
+      "configurations": [
+        "🏛️ تشغيل خادم النظام الخلفي (Node.js API - Port 5000)",
+        "⚡ تشغيل فلاتر (تطوير ومراقبة الأخطاء في Debug Console)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

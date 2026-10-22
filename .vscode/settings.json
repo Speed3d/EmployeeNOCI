@@ -1,0 +1,5 @@
+{
+  "dart.flutterAdditionalArgs": [
+    "--web-port=8080"
+  ]
+}

@@ -21,7 +21,9 @@ app/build/
 **/build/
 *.iml
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
 
 # OS files
 .DS_Store

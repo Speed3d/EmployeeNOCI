@@ -1,18 +1,6 @@
 @echo off
-chcp 65001 > nul
-title إيقاف نظام حضور وبصمة موظفي المقر - NOCI Attendance
-
-echo ========================================================
-echo   🛑 جاري إيقاف نظام حضور وبصمة موظفي المقر (NOCI Attendance)
-echo ========================================================
-echo.
-echo جاري فحص المنفذ 5000 وإنهاء السيرفر بأمان...
-
-powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue; if ($conns) { $conns | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host '✔ تم إنهاء عملية الخادم بنجاح!' -ForegroundColor Green } else { Write-Host 'ℹ️ لم يتم العثور على أي خادم قيد التشغيل على المنفذ 5000 (النظام متوقف بالفعل).' -ForegroundColor Yellow }"
-
-echo.
-echo ========================================================
-echo  ✔ تم إيقاف النظام بالكامل والمنفذ 5000 متاح الآن.
-echo ========================================================
+title Stop NOCI Attendance Server
+echo Stopping server on port 5000...
+powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue; if ($conns) { foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host 'Server stopped successfully!' -ForegroundColor Green } else { Write-Host 'Server is not running.' -ForegroundColor Yellow }"
 echo.
 pause

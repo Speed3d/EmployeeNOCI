@@ -1,33 +1,16 @@
 @echo off
-chcp 65001 > nul
-title نظام حضور وبصمة موظفي المقر - NOCI Attendance
-
-echo ========================================================
-echo   🏛️ تشغيل نظام حضور وبصمة موظفي المقر (NOCI Attendance)
-echo ========================================================
-echo.
-
+title NOCI Attendance System
 cd /d "%~dp0backend"
-
-echo [1/3] فحص قاعدة البيانات والموظفين...
-node scripts/seed_employees.js
-
+echo [1/3] Checking database...
+node scripts\seed_employees.js
 echo.
-echo [2/3] جاري تشغيل الخادم واستضافة واجهة النظام على المنفذ 5000...
-echo      (سيتم فتح المتصفح تلقائياً على http://localhost:5000)
-echo.
-
+echo [2/3] Launching browser at http://localhost:5000 ...
 start "" powershell -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:5000'"
-
-echo [3/3] خادم النظام والواجهة قيد التشغيل المباشر الآن...
-echo --------------------------------------------------------
-echo 💡 لإيقاف النظام في أي وقت (بدون إعادة تشغيل الكمبيوتر):
-echo    - اضغط على (Ctrl + C) أو أغلق هذه النافذة مباشرة (X).
-echo    - أو انقر مرتين على ملف "إيقاف النظام.bat" في المجلد الرئيسي.
-echo --------------------------------------------------------
+echo.
+echo [3/3] Server is running on http://localhost:5000
+echo ========================================================
+echo Close this window to stop the server.
 echo ========================================================
 echo.
-
-node src/app.js
-
+node src\app.js
 pause
