@@ -6,7 +6,13 @@ const path = require('path');
 const db = require('../src/core/database');
 const { parseMasterEmployeesFile } = require('../src/tools/excelHelper');
 
-function seedEmployees() {
+function seedEmployees(force = false) {
+  const currentCount = db.prepare('SELECT COUNT(*) as count FROM employees').get().count;
+  if (currentCount > 0 && !force && !process.argv.includes('--force')) {
+    console.log(`قاعدة البيانات تحتوي بالفعل على ${currentCount} موظف (تم تخطي إعادة البذر التلقائي).`);
+    return;
+  }
+
   const excelPath = path.join(__dirname, '../../اساس/اسماء موظفين المقر.xlsx');
   console.log(`جاري قراءة ملف الموظفين من: ${excelPath}`);
 
