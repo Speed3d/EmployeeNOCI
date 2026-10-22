@@ -72,10 +72,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     String? targetDept = _departments.isNotEmpty ? _departments.first['name'].toString() : '';
     final reasonController = TextEditingController();
 
+    final messenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
+        builder: (dialogCtx, setDialogState) {
           return AlertDialog(
             title: Row(
               children: [
@@ -140,7 +142,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                             'newDepartment': targetDept,
                             'reason': reasonController.text.trim(),
                           });
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if (!mounted) return;
+                          messenger.showSnackBar(
                             SnackBar(
                               backgroundColor: AppColors.onTime,
                               content: Text('تم نقل الموظف إلى قسم [$targetDept] بنجاح وتسجيل النقل في السجل!'),
@@ -148,8 +151,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                           );
                           _loadEmployees();
                         } catch (e) {
+                          if (!mounted) return;
                           setState(() => _isLoading = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(backgroundColor: AppColors.danger, content: Text('فشل النقل: $e')),
                           );
                         }

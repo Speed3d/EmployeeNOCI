@@ -67,10 +67,12 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
     DateTime endDate = DateTime.now();
     final reasonController = TextEditingController();
 
+    final messenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
+        builder: (dialogCtx, setModalState) {
           return AlertDialog(
             title: const Text('تسجيل إجازة لموظف'),
             content: SizedBox(
@@ -172,9 +174,12 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                             'reason': reasonController.text.trim(),
                           });
                           Navigator.pop(ctx);
+                          if (!mounted) return;
+                          messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم تسجيل الإجازة بنجاح')));
                           _loadData();
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                          if (!mounted) return;
+                          messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text(e.toString())));
                         }
                       },
                 child: const Text('تسجيل الإجازة'),
@@ -190,10 +195,12 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
     DateTime holidayDate = DateTime.now();
     final titleController = TextEditingController();
 
+    final messenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
+        builder: (dialogCtx, setModalState) {
           return AlertDialog(
             title: const Text('إضافة عطلة أو مناسبة رسمية'),
             content: SizedBox(
@@ -237,9 +244,12 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                       'title': titleController.text.trim(),
                     });
                     Navigator.pop(ctx);
+                    if (!mounted) return;
+                    messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم إضافة العطلة الرسمية بنجاح')));
                     _loadData();
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                    if (!mounted) return;
+                    messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text(e.toString())));
                   }
                 },
                 child: const Text('إضافة العطلة'),
