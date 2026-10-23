@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/auth_provider.dart';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
@@ -14,14 +15,39 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'Admin@123456');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _urlController = TextEditingController(text: ApiClient.instance.baseUrl);
 
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
   bool _showServerConfig = false;
+  bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final remember = prefs.getBool('remember_me') ?? false;
+      if (remember) {
+        final savedUser = prefs.getString('saved_username') ?? '';
+        final savedPass = prefs.getString('saved_password') ?? '';
+        if (mounted) {
+          setState(() {
+            _rememberMe = true;
+            _usernameController.text = savedUser;
+            _passwordController.text = savedPass;
+          });
+        }
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -47,6 +73,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await AuthProvider.instance.login(username, password);
+
+      // حفظ أو مسح بيانات الدخول وفق خيار تذكرني
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (_rememberMe) {
+          await prefs.setBool('remember_me', true);
+          await prefs.setString('saved_username', username);
+          await prefs.setString('saved_password', password);
+        } else {
+          await prefs.remove('remember_me');
+          await prefs.remove('saved_username');
+          await prefs.remove('saved_password');
+        }
+      } catch (_) {}
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -213,7 +253,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       onSubmitted: (_) => _handleLogin(),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+
+                    // خيار تذكر بيانات تسجيل الدخول
+                    InkWell(
+                      onTap: () => setState(() => _rememberMe = !_rememberMe),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _rememberMe,
+                              activeColor: AppColors.navy,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                              onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                            ),
+                            const Text(
+                              'تذكر بيانات تسجيل الدخول على هذا الجهاز',
+                              style: TextStyle(fontSize: 13, color: AppColors.navyDeep),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                     // زر تسجيل الدخول
                     CustomButton(

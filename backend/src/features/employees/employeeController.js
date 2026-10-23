@@ -9,7 +9,8 @@ const { ROLES } = require('../../shared/constants');
 
 function listEmployees(req, res) {
   const { search, department, status, isExempt } = req.query;
-  const today = new Date().toISOString().split('T')[0];
+  // اعتماد توقيت بغداد لتطابق تاريخ الإجازات واليوم الحالي
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baghdad' }).format(new Date());
 
   let query = `
     SELECT e.*,

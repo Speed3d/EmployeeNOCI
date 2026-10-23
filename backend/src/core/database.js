@@ -300,7 +300,11 @@ function seedDefaultSettings() {
     { key: 'announcement_banner_text', value: '', description: 'نص شريط الإعلانات والتعاميم العلوي' },
     { key: 'announcement_banner_active', value: 'false', description: 'حالة إظهار شريط التنبيهات العلوي' },
     { key: 'maintenance_mode', value: 'false', description: 'وضع الصيانة لإيقاف دخول المستخدمين العاديين' },
-    { key: 'active_year', value: '2026', description: 'السنة المالية/الإدارية النشطة حالياً' }
+    { key: 'active_year', value: '2026', description: 'السنة المالية/الإدارية النشطة حالياً' },
+    { key: 'color_active_leave', value: '#E8F1FC', description: 'لون بطاقات وخلايا الموظف المجاز حالياً' },
+    { key: 'color_seconded', value: '#FFF3E0', description: 'لون بطاقات وخلايا الموظف المنسب' },
+    { key: 'color_terminated', value: '#FFEBEE', description: 'لون بطاقات وخلايا الموظف المنتهي خدماته أو المستقيل أو المتوفى' },
+    { key: 'color_vip_exempt', value: '#ECEFF1', description: 'لون بطاقات وخلايا المستثنى VIP' }
   ];
 
   const insertStmt = db.prepare(`

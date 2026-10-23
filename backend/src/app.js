@@ -20,6 +20,7 @@ const auditRoutes = require('./features/audit_logs/auditRoutes');
 const chatRoutes = require('./features/chat/chatRoutes');
 const reportRoutes = require('./features/reports/reportRoutes');
 const scheduleRoutes = require('./features/schedules/scheduleRoutes');
+const backupRoutes = require('./features/backup/backupRoutes');
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/schedules', scheduleRoutes);
+app.use('/api/backup', backupRoutes);
 
 // 3. استضافة ملفات الويب المجمعة من Flutter إن وجدت
 const webBuildPath = path.join(__dirname, '../../app/build/web');

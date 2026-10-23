@@ -221,6 +221,28 @@ class _ChatScreenState extends State<ChatScreen> {
     bool isVerifying = false;
     String? errorMsg;
 
+    String cleanDigits(String s) {
+      const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+      for (int i = 0; i < 10; i++) {
+        s = s.replaceAll(ar[i], '$i');
+      }
+      return s.trim();
+    }
+
+    Future<void> submit() async {
+      if (isVerifying) return;
+      final pwd = cleanDigits(passwordCtrl.text);
+      if (pwd.isEmpty) {
+        return;
+      }
+      try {
+        await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
+        if (mounted) Navigator.pop(context, true);
+      } catch (e) {
+        throw Exception(e);
+      }
+    }
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -261,7 +283,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     onSubmitted: (_) async {
                       if (isVerifying) return;
-                      final pwd = passwordCtrl.text.trim();
+                      final pwd = cleanDigits(passwordCtrl.text);
                       if (pwd.isEmpty) {
                         setDlgState(() => errorMsg = 'يرجى إدخال كلمة المرور');
                         return;
@@ -298,7 +320,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 onPressed: isVerifying
                     ? null
                     : () async {
-                        final pwd = passwordCtrl.text.trim();
+                        final pwd = cleanDigits(passwordCtrl.text);
                         if (pwd.isEmpty) {
                           setDlgState(() => errorMsg = 'يرجى إدخال كلمة المرور');
                           return;

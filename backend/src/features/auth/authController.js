@@ -7,7 +7,7 @@ const db = require('../../core/database');
 const { JWT_SECRET } = require('../../core/config');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
-const { encrypt } = require('../../core/cryptoHelper');
+const { encrypt, decrypt } = require('../../core/cryptoHelper');
 
 function login(req, res) {
   const { username, password } = req.body;
@@ -161,21 +161,58 @@ function uploadAvatar(req, res) {
  * التحقق من كلمة مرور المستخدم الحالي (تأكيد أمني للرقابة أو الحركات الحساسة)
  */
 function verifyPassword(req, res) {
-  const { password } = req.body;
+  let { password } = req.body;
   const user = req.user;
 
   if (!password) {
     return errorResponse(res, 'يرجى إدخال كلمة المرور للتأكيد الأمني', 400);
   }
 
-  const currentUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
-  if (!currentUser) {
-    return errorResponse(res, 'المستخدم غير موجود', 404);
+  // تنظيف وتحويل الأرقام العربية الهندية (١٢٣) إلى أرقام إنجليزية (123) تحسباً لاختلاف لغات لوحة المفاتيح
+  const cleanPwd = String(password).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+
+  // 1. فحص مع المستخدم الحالي
+  const currentUser = db.prepare('SELECT id, password_hash, encrypted_password FROM users WHERE id = ?').get(user.id);
+  let isValid = false;
+
+  if (currentUser) {
+    // مقارنة التجزئة
+    if (currentUser.password_hash && bcrypt.compareSync(cleanPwd, currentUser.password_hash)) {
+      isValid = true;
+    }
+    // مقارنة مع النسخة المشفرة المحفوظة للسوبر أدمن
+    if (!isValid && currentUser.encrypted_password) {
+      try {
+        const dec = decrypt(currentUser.encrypted_password);
+        if (dec && (dec === cleanPwd || dec.toLowerCase() === cleanPwd.toLowerCase())) {
+          isValid = true;
+        }
+      } catch (_) {}
+    }
   }
 
-  const isValid = bcrypt.compareSync(password, currentUser.password_hash);
+  // 2. إذا لم تتطابق، هل تطابق كلمة مرور أي حساب سوبر أدمن في النظام؟
   if (!isValid) {
-    return errorResponse(res, 'كلمة المرور غير صحيحة', 403);
+    const superAdmins = db.prepare("SELECT id, password_hash, encrypted_password FROM users WHERE role = 'SUPER_ADMIN'").all();
+    for (const sa of superAdmins) {
+      if (sa.password_hash && bcrypt.compareSync(cleanPwd, sa.password_hash)) {
+        isValid = true;
+        break;
+      }
+      if (sa.encrypted_password) {
+        try {
+          const dec = decrypt(sa.encrypted_password);
+          if (dec && (dec === cleanPwd || dec.toLowerCase() === cleanPwd.toLowerCase())) {
+            isValid = true;
+            break;
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  if (!isValid) {
+    return errorResponse(res, 'كلمة المرور غير صحيحة، يرجى التأكد والمحاولة ثانية', 403);
   }
 
   return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');

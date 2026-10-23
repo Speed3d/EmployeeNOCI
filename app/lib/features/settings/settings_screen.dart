@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
@@ -35,15 +36,37 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   bool _maintenanceMode = false;
   String _currentLogoUrl = '';
 
+  // ألوان تمييز حالات الموظفين
+  String _colorActiveLeave = '#E8F1FC';
+  String _colorSeconded = '#FFF3E0';
+  String _colorTerminated = '#FFEBEE';
+  String _colorVipExempt = '#ECEFF1';
+
+  // سجل النسخ الاحتياطية
+  List<dynamic> _backupsList = [];
+  bool _isLoadingBackups = false;
+
   // قائمة المستخدمين والأقسام
   List<dynamic> _users = [];
   List<dynamic> _departments = [];
 
+  static Color parseHex(String? hex, Color fallback) {
+    if (hex == null || hex.isEmpty) return fallback;
+    try {
+      String clean = hex.replaceAll('#', '').trim();
+      if (clean.length == 6) clean = 'FF$clean';
+      return Color(int.parse(clean, radix: 16));
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadSettingsAndUsers();
+    _loadBackups();
   }
 
   @override
@@ -81,6 +104,11 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _maintenanceMode = settings['maintenance_mode'] == 'true';
         _activeYearController.text = settings['active_year'] ?? '2026';
         _currentLogoUrl = settings['logo_url'] ?? '';
+
+        _colorActiveLeave = settings['color_active_leave'] ?? '#E8F1FC';
+        _colorSeconded = settings['color_seconded'] ?? '#FFF3E0';
+        _colorTerminated = settings['color_terminated'] ?? '#FFEBEE';
+        _colorVipExempt = settings['color_vip_exempt'] ?? '#ECEFF1';
 
         _users = users is List ? users : [];
         _departments = depts is List ? depts : [];
@@ -195,6 +223,293 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       setState(() => _isLoading = false);
       messenger.showSnackBar(SnackBar(content: Text('فشل رفع الشعار: $e')));
     }
+  }
+
+  // حفظ ألوان حالات الموظفين
+  Future<void> _saveStatusColors() async {
+    setState(() => _isLoading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiClient.instance.put('/settings', {
+        'color_active_leave': _colorActiveLeave,
+        'color_seconded': _colorSeconded,
+        'color_terminated': _colorTerminated,
+        'color_vip_exempt': _colorVipExempt,
+      });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم حفظ ألوان حالات الموظفين بنجاح وتطبيقها على السجل!'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل حفظ الألوان: $e')));
+    }
+  }
+
+  // إدارة النسخ الاحتياطي والاستعادة
+  Future<void> _loadBackups() async {
+    setState(() => _isLoadingBackups = true);
+    try {
+      final res = await ApiClient.instance.get('/backup');
+      if (res is List && mounted) {
+        setState(() {
+          _backupsList = res;
+          _isLoadingBackups = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingBackups = false);
+    }
+  }
+
+  Future<void> _createNewBackup() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
+    try {
+      await ApiClient.instance.post('/backup/create', {});
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم إنشاء وحفظ نقطة النسخة الاحتياطية بنجاح!'),
+        ),
+      );
+      _loadBackups();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل إنشاء النسخة: $e')));
+    }
+  }
+
+  Future<void> _downloadBackup(String? filename) async {
+    final baseUrl = ApiClient.instance.baseUrl;
+    final token = ApiClient.instance.token ?? '';
+    final url = '$baseUrl/backup/download?token=$token&filename=${filename ?? 'current'}';
+    try {
+      if (await canLaunchUrl(Uri.parse(url))) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر بدء التنزيل: $e')));
+      }
+    }
+  }
+
+  Future<void> _restoreBackupFromFile() async {
+    final files = await FilePicker.pickFiles(type: FileType.any);
+    if (files.isEmpty) return;
+    final file = files.first;
+    if (!file.name.toLowerCase().endsWith('.db')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: AppColors.danger, content: Text('يرجى اختيار ملف قاعدة بيانات SQLite بصيغة .db حصراً')),
+        );
+      }
+      return;
+    }
+
+    final verified = await _promptPasswordForSensitiveAction('استعادة قاعدة البيانات من ملف خارجي: (${file.name})');
+    if (verified != true) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final bytes = await file.xFile.readAsBytes();
+    setState(() => _isLoading = true);
+    try {
+      await ApiClient.instance.uploadFile('/backup/restore', bytes, file.name);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم استعادة قاعدة البيانات بنجاح تام! تم تحديث كافة السجلات.'),
+        ),
+      );
+      _loadBackups();
+      _loadSettingsAndUsers();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل الاستعادة: $e')));
+    }
+  }
+
+  Future<void> _restoreNamedBackup(String filename) async {
+    final verified = await _promptPasswordForSensitiveAction('استعادة قاعدة البيانات من النسخة: [$filename]');
+    if (verified != true) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
+    try {
+      await ApiClient.instance.post('/backup/restore', {'filename': filename});
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم استعادة قاعدة البيانات بنجاح من النسخة [$filename]!'),
+        ),
+      );
+      _loadBackups();
+      _loadSettingsAndUsers();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل الاستعادة: $e')));
+    }
+  }
+
+  Future<void> _deleteNamedBackup(String filename) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: Text('هل أنت متأكد من حذف النسخة الاحتياطية [$filename] نهائياً من السيرفر؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('نعم، حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await ApiClient.instance.delete('/backup/$filename');
+      _loadBackups();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل الحذف: $e')));
+      }
+    }
+  }
+
+  // نافذة تأكيد الهوية بكلمة مرور السوبر أدمن قبل العمليات الحساسة
+  Future<bool?> _promptPasswordForSensitiveAction(String actionTitle) async {
+    final passCtrl = TextEditingController();
+    bool obscure = true;
+    bool isVerifying = false;
+    String? err;
+
+    String cleanDigits(String s) {
+      const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+      for (int i = 0; i < 10; i++) {
+        s = s.replaceAll(ar[i], '$i');
+      }
+      return s.trim();
+    }
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.security_rounded, color: AppColors.danger),
+                SizedBox(width: 8),
+                Text('تأكيد أمني مطلوب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'يتطلب تنفيذ ($actionTitle) إدخال كلمة مرور حساب السوبر أدمن لتأكيد العملية وحماية البيانات:',
+                    style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: obscure,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'كلمة مرور السوبر أدمن',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                        onPressed: () => setDlgState(() => obscure = !obscure),
+                      ),
+                      errorText: err,
+                    ),
+                    onSubmitted: (_) async {
+                      final pwd = cleanDigits(passCtrl.text);
+                      if (pwd.isEmpty) {
+                        setDlgState(() => err = 'يرجى إدخال كلمة المرور');
+                        return;
+                      }
+                      setDlgState(() {
+                        isVerifying = true;
+                        err = null;
+                      });
+                      try {
+                        await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
+                        if (context.mounted) Navigator.pop(context, true);
+                      } catch (e) {
+                        setDlgState(() {
+                          isVerifying = false;
+                          err = 'كلمة المرور غير صحيحة، يرجى التأكد والمحاولة';
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isVerifying ? null : () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+                icon: isVerifying
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_circle_rounded, size: 16),
+                label: const Text('تأكيد ومتابعة'),
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final pwd = cleanDigits(passCtrl.text);
+                        if (pwd.isEmpty) {
+                          setDlgState(() => err = 'يرجى إدخال كلمة المرور');
+                          return;
+                        }
+                        setDlgState(() {
+                          isVerifying = true;
+                          err = null;
+                        });
+                        try {
+                          await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
+                          if (context.mounted) Navigator.pop(context, true);
+                        } catch (e) {
+                          setDlgState(() {
+                            isVerifying = false;
+                            err = 'كلمة المرور غير صحيحة، يرجى التأكد والمحاولة';
+                          });
+                        }
+                      },
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   // كشف كلمة المرور لمستخدم محدد (النقطة 15)
@@ -472,8 +787,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             tabs: const [
               Tab(icon: Icon(Icons.access_time_rounded), text: 'قواعد الدوام والمكافأة'),
               Tab(icon: Icon(Icons.branding_watermark_rounded), text: 'الهوية والمؤسسة'),
+              Tab(icon: Icon(Icons.palette_rounded), text: 'ألوان حالات الموظفين'),
               Tab(icon: Icon(Icons.filter_alt_off_rounded), text: 'استثناء الأقسام'),
               Tab(icon: Icon(Icons.manage_accounts_rounded), text: 'المستخدمون والصلاحيات'),
+              Tab(icon: Icon(Icons.cloud_sync_rounded), text: 'النسخ الاحتياطي والاستعادة'),
               Tab(icon: Icon(Icons.restart_alt_rounded), text: 'تصفير النظام والصيانة'),
             ],
           ),
@@ -650,7 +967,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       ),
                     ),
 
-                    // تبويب 3: استثناء الأقسام (النقطة 5 و 7)
+                    // تبويب 3: ألوان حالات الموظفين
+                    _buildStatusColorsTab(),
+
+                    // تبويب 4: استثناء الأقسام (النقطة 5 و 7)
                     ListView.separated(
                       padding: const EdgeInsets.all(24),
                       itemCount: _departments.length,
@@ -756,7 +1076,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       ],
                     ),
 
-                    // تبويب 5: تصفير النظام والصيانة
+                    // تبويب 6: النسخ الاحتياطي والاستعادة
+                    _buildBackupRestoreTab(),
+
+                    // تبويب 7: تصفير النظام والصيانة
                     SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
                       child: Column(
@@ -853,6 +1176,423 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     ),
                   ],
                 ),
+    );
+  }
+
+  /// Hint: تبويب تخصيص ألوان حالات الموظفين في السجل
+  Widget _buildStatusColorsTab() {
+    final activeLeaveColor = parseHex(_colorActiveLeave, const Color(0xFFE8F1FC));
+    final secondedColor = parseHex(_colorSeconded, const Color(0xFFFFF3E0));
+    final terminatedColor = parseHex(_colorTerminated, const Color(0xFFFFEBEE));
+    final vipExemptColor = parseHex(_colorVipExempt, const Color(0xFFECEFF1));
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.palette_rounded, color: AppColors.navy, size: 24),
+                      SizedBox(width: 10),
+                      Text(
+                        'ألوان تمييز حالات الموظفين في السجل (خاص بالسوبر أدمن)',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'يمكنك هنا تخصيص الألوان التي تُلوّن بها خلايا وبطاقات الموظفين في شاشة سجل ودليل الموظفين وفق حالتهم الوظيفية الحالية:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // 1. إجازة حالياً وسارية
+                  _buildColorSettingItem(
+                    title: '1. لون الموظف المجاز حالياً (إجازة سارية)',
+                    subtitle: 'تُطبق على أي موظف لديه إجازة معتمدة تغطي تاريخ اليوم الحالي',
+                    currentColorHex: _colorActiveLeave,
+                    palette: const ['#E8F1FC', '#E3F2FD', '#E0F7FA', '#E8F8F5', '#F4ECF7'],
+                    onColorSelected: (val) => setState(() => _colorActiveLeave = val),
+                  ),
+                  const Divider(height: 32),
+
+                  // 2. موظف منسب
+                  _buildColorSettingItem(
+                    title: '2. لون الموظف المنسب (تنسيب)',
+                    subtitle: 'تُطبق على الموظفين المنسبين وفق سجل الحالة الوظيفية',
+                    currentColorHex: _colorSeconded,
+                    palette: const ['#FFF3E0', '#FFF8E1', '#FEF9E7', '#FDEBD0', '#FBEEE6'],
+                    onColorSelected: (val) => setState(() => _colorSeconded = val),
+                  ),
+                  const Divider(height: 32),
+
+                  // 3. منتهي خدماته / استقالة / متوفى
+                  _buildColorSettingItem(
+                    title: '3. لون الموظف المنتهي خدماته (استقالة / إنهاء خدمة / متوفى)',
+                    subtitle: 'تُطبق على المستقيلين أو المتوفين لتمييزهم فورياً عن الكادر النشط',
+                    currentColorHex: _colorTerminated,
+                    palette: const ['#FFEBEE', '#FFCDD2', '#FDEDEC', '#FADBD8', '#F5EEF8'],
+                    onColorSelected: (val) => setState(() => _colorTerminated = val),
+                  ),
+                  const Divider(height: 32),
+
+                  // 4. مستثنى قيادي VIP
+                  _buildColorSettingItem(
+                    title: '4. لون المستثنى القيادي (VIP)',
+                    subtitle: 'تُطبق على الأمين العام والمستشارين المستثنين رسمياً من البصمة',
+                    currentColorHex: _colorVipExempt,
+                    palette: const ['#ECEFF1', '#CFD8DC', '#F2F4F4', '#EAEDED', '#E5E8E8'],
+                    onColorSelected: (val) => setState(() => _colorVipExempt = val),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // معاينة مباشرة
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('معاينة حية لشكل البطاقات في سجل الموظفين بالألوان المحددة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(child: _buildMiniCardPreview('مجاز حالياً', '🏖️ إجازة سارية', activeLeaveColor, const Color(0xFF1976D2))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildMiniCardPreview('موظف منسب', '📋 تنسيب', secondedColor, const Color(0xFFE65100))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildMiniCardPreview('منتهي خدماته', '🛑 استقالة', terminatedColor, const Color(0xFFD32F2F))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildMiniCardPreview('مستثنى VIP', '⭐ قيادي VIP', vipExemptColor, const Color(0xFF546E7A))),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.navy,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.save_rounded, size: 18),
+                    label: const Text('حفظ ألوان حالات الموظفين', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: _saveStatusColors,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Hint: تبويب النسخ الاحتياطي والاستعادة الفورية لقاعدة البيانات
+  Widget _buildBackupRestoreTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. بطاقة إنشاء وتحميل نسخة احتياطية
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.backup_rounded, color: AppColors.navy, size: 24),
+                      SizedBox(width: 10),
+                      Text('النسخ الاحتياطي لقاعدة البيانات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'يمكنك إنشاء نقطة نسخ احتياطي فورية لكامل قاعدة البيانات (السجلات، الموظفين، الحضور، الإعدادات) وحفظها على السيرفر أو تنزيلها مباشرة إلى جهازك بصيغة .db لاستخدامها وقت الحاجة:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.navy,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                        label: const Text('إنشاء نقطة نسخ احتياطي جديدة على السيرفر', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: _createNewBackup,
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.navy,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.download_rounded, size: 18),
+                        label: const Text('تنزيل نسخة احتياطية فورية على جهاز الكمبيوتر (.db)', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: () => _downloadBackup('current'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 2. بطاقة استعادة نسخة احتياطية من جهاز المستخدم
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFFE082)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.settings_backup_restore_rounded, color: Color(0xFFF57F17), size: 24),
+                    SizedBox(width: 10),
+                    Text('استعادة قاعدة البيانات من ملف خارجي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFF57F17))),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'تتيح لك هذه الميزة رفع ملف قاعدة بيانات (.db) سبق حفظه واسترجاع كافة البيانات كما كانت. حفاظاً على الأمان، يقوم النظام تلقائياً بأخذ نسخة أمان استباقية قبل الاستبدال، ويتطلب إدخال كلمة مرور السوبر أدمن للتأكيد.',
+                  style: TextStyle(fontSize: 13, color: Colors.brown, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF57F17),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  label: const Text('اختيار ملف قاعدة بيانات (.db) واستعادة البيانات', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: _restoreBackupFromFile,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // 3. جدول النسخ الاحتياطية المحفوظة محلياً
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.history_rounded, color: AppColors.navy, size: 22),
+                          SizedBox(width: 8),
+                          Text('النسخ الاحتياطية المحفوظة على السيرفر', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, color: AppColors.navy),
+                        tooltip: 'تحديث القائمة',
+                        onPressed: _loadBackups,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_isLoadingBackups)
+                    const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+                  else if (_backupsList.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(
+                        child: Text('لا توجد نسخ احتياطية محفوظة حتى الآن، اضغط على زر الإنشاء أعلاه لحفظ أول نسخة', style: TextStyle(color: Colors.grey)),
+                      ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _backupsList.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, i) {
+                        final b = _backupsList[i];
+                        return ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: Color(0xFFE8F1FC),
+                            child: Icon(Icons.storage_rounded, color: AppColors.navy, size: 20),
+                          ),
+                          title: Text(b['filename'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          subtitle: Text('الحجم: ${b['sizeFormatted']} • تاريخ الإنشاء: ${b['createdAt']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                ),
+                                icon: const Icon(Icons.restore_rounded, size: 16, color: AppColors.navy),
+                                label: const Text('استعادة', style: TextStyle(fontSize: 11, color: AppColors.navy)),
+                                onPressed: () => _restoreNamedBackup(b['filename']),
+                              ),
+                              const SizedBox(width: 6),
+                              IconButton(
+                                icon: const Icon(Icons.download_rounded, size: 18, color: AppColors.navy),
+                                tooltip: 'تنزيل على جهازك',
+                                onPressed: () => _downloadBackup(b['filename']),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.danger),
+                                tooltip: 'حذف النسخة',
+                                onPressed: () => _deleteNamedBackup(b['filename']),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorSettingItem({
+    required String title,
+    required String subtitle,
+    required String currentColorHex,
+    required List<String> palette,
+    required ValueChanged<String> onColorSelected,
+  }) {
+    final current = parseHex(currentColorHex, Colors.white);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 4),
+        Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: current,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.grey.shade400, width: 1.5),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            for (final hex in palette)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: InkWell(
+                  onTap: () => onColorSelected(hex),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: parseHex(hex, Colors.white),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: currentColorHex.toLowerCase() == hex.toLowerCase() ? AppColors.navy : Colors.grey.shade300,
+                        width: currentColorHex.toLowerCase() == hex.toLowerCase() ? 2.5 : 1,
+                      ),
+                    ),
+                    child: currentColorHex.toLowerCase() == hex.toLowerCase()
+                        ? const Icon(Icons.check_rounded, size: 16, color: AppColors.navy)
+                        : null,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 110,
+              height: 36,
+              child: TextFormField(
+                initialValue: currentColorHex,
+                key: ValueKey(currentColorHex),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onChanged: (val) {
+                  if (val.trim().isNotEmpty) onColorSelected(val.trim());
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniCardPreview(String label, String tag, Color bg, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
+            child: Text(tag, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 }

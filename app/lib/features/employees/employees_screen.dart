@@ -21,11 +21,43 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   String _searchQuery = '';
   String? _selectedDept;
 
+  // ألوان تمييز حالات الموظفين القابلة للتخصيص من الإعدادات
+  Color _colorActiveLeave = const Color(0xFFE8F1FC); // أزرق فاتح
+  Color _colorSeconded = const Color(0xFFFFF3E0);    // برتقالي فاتح
+  Color _colorTerminated = const Color(0xFFFFEBEE);  // أحمر فاتح
+  Color _colorVipExempt = const Color(0xFFECEFF1);   // رمادي فاتح
+
+  static Color parseHex(String? hex, Color fallback) {
+    if (hex == null || hex.isEmpty) return fallback;
+    try {
+      String clean = hex.replaceAll('#', '').trim();
+      if (clean.length == 6) clean = 'FF$clean';
+      return Color(int.parse(clean, radix: 16));
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _loadDepartments();
     _loadEmployees();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final res = await ApiClient.instance.get('/settings');
+      if (res is Map && mounted) {
+        setState(() {
+          _colorActiveLeave = parseHex(res['color_active_leave'], const Color(0xFFE8F1FC));
+          _colorSeconded = parseHex(res['color_seconded'], const Color(0xFFFFF3E0));
+          _colorTerminated = parseHex(res['color_terminated'], const Color(0xFFFFEBEE));
+          _colorVipExempt = parseHex(res['color_vip_exempt'], const Color(0xFFECEFF1));
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadDepartments() async {
@@ -541,110 +573,134 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                               final isExempt = emp['is_exempt'] == 1;
                               final bool hasActiveLeave = emp['has_active_leave'] == 1;
                               final String status = (emp['status'] ?? '').toString();
-                              final bool isDeceased = status.contains('متوف'); // متوفى أو متوفي
                               final bool isSeconded = status.contains('نسب'); // تنسيب أو منسب
+                              final bool isTerminated = status.contains('استقال') ||
+                                  status.contains('متوف') ||
+                                  status.contains('انهاء') ||
+                                  status.contains('منتهي'); // استقالة أو متوفى أو إنهاء خدمة
 
                               Color cardBgColor = Colors.white;
                               BorderSide cardBorder = BorderSide(color: Colors.grey.shade200);
+                              Color accentColor = AppColors.navy;
 
                               if (hasActiveLeave) {
-                                cardBgColor = const Color(0xFFE8F1FC); // أزرق فاتح راقٍ (إجازة رسمية)
-                                cardBorder = const BorderSide(color: Color(0xFF90CAF9), width: 1.5);
-                              } else if (isDeceased) {
-                                cardBgColor = const Color(0xFFFFEBEE); // أحمر فاتح (متوفى)
-                                cardBorder = const BorderSide(color: Color(0xFFEF9A9A), width: 1.5);
+                                cardBgColor = _colorActiveLeave; // أزرق فاتح قابل للتخصيص
+                                accentColor = const Color(0xFF1976D2);
+                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
+                              } else if (isTerminated) {
+                                cardBgColor = _colorTerminated; // أحمر فاتح قابل للتخصيص
+                                accentColor = const Color(0xFFD32F2F);
+                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
                               } else if (isSeconded) {
-                                cardBgColor = const Color(0xFFFFF3E0); // برتقالي فاتح (تنسيب)
-                                cardBorder = const BorderSide(color: Color(0xFFFFCC80), width: 1.5);
+                                cardBgColor = _colorSeconded; // برتقالي فاتح قابل للتخصيص
+                                accentColor = const Color(0xFFE65100);
+                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
+                              } else if (isExempt) {
+                                cardBgColor = _colorVipExempt;
+                                accentColor = const Color(0xFF546E7A);
+                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
                               }
+
+                              final bool isSpecialStatus = hasActiveLeave || isTerminated || isSeconded || isExempt;
 
                               return Card(
                                 color: cardBgColor,
-                                elevation: hasActiveLeave || isDeceased || isSeconded ? 2 : 1,
+                                elevation: isSpecialStatus ? 2 : 1,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   side: cardBorder,
                                 ),
-                                child: ListTile(
-                                  onTap: () => _showEmployeeProfileDialog(emp),
-                                  leading: CircleAvatar(
-                                    backgroundColor: hasActiveLeave
-                                        ? AppColors.info
-                                        : (isDeceased
-                                            ? AppColors.danger
-                                            : (isSeconded ? Colors.orange.shade800 : AppColors.navy)),
-                                    child: Text(
-                                      '${emp['emp_code']}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-                                    ),
-                                  ),
-                                  title: Wrap(
-                                    spacing: 6,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                clipBehavior: Clip.antiAlias,
+                                child: IntrinsicHeight(
+                                  child: Row(
                                     children: [
-                                      Text(emp['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                      if (hasActiveLeave)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.info,
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            '🏖️ إجازة: ${emp['active_leave_type'] ?? ''}',
-                                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                      if (isDeceased)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.danger,
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text('🕊️ متوفى', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-                                        ),
-                                      if (isSeconded)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.orange.shade800,
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text('📋 تنسيب', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-                                        ),
-                                      if (isExempt)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.vipExempt.withOpacity(0.15),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text('مستثنى VIP', style: TextStyle(fontSize: 10, color: AppColors.vipExempt, fontWeight: FontWeight.bold)),
-                                        ),
-                                    ],
-                                  ),
-                                  subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      '${emp['department']} • الحالة: ${emp['status']}' +
-                                          (emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : '') +
-                                          ' (انقر لعرض الملف والإجازات)',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDeceased ? Colors.red.shade900 : (isSeconded ? Colors.brown.shade800 : Colors.grey.shade700),
+                                      // شريط لوني جانبي بارز يوضح حالة الموظف
+                                      Container(
+                                        width: 6,
+                                        color: isSpecialStatus ? accentColor : Colors.transparent,
                                       ),
-                                    ),
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.assignment_ind_rounded, color: AppColors.navy),
-                                        tooltip: 'عرض الملف وسجل الإجازات والتنقلات',
-                                        onPressed: () => _showEmployeeProfileDialog(emp),
-                                      ),
-                                      if (auth.isSuperAdmin) ...[
+                                      Expanded(
+                                        child: ListTile(
+                                          onTap: () => _showEmployeeProfileDialog(emp),
+                                          leading: CircleAvatar(
+                                            backgroundColor: accentColor,
+                                            child: Text(
+                                              '${emp['emp_code']}',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                                            ),
+                                          ),
+                                          title: Wrap(
+                                            spacing: 6,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              Text(emp['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                              if (hasActiveLeave)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF1976D2),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    '🏖️ إجازة سارية: ${emp['active_leave_type'] ?? ''}',
+                                                    style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ),
+                                              if (isTerminated)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFD32F2F),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    status.contains('متوف') ? '🕊️ متوفى' : '🛑 منتهي خدماته ($status)',
+                                                    style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ),
+                                              if (isSeconded)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFE65100),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: const Text('📋 منسب / تنسيب', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                                ),
+                                              if (isExempt)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF546E7A),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: const Text('⭐ مستثنى VIP', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                                ),
+                                            ],
+                                          ),
+                                          subtitle: Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text(
+                                              '${emp['department']} • الحالة: ${emp['status']}' +
+                                                  (emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : '') +
+                                                  ' (انقر لعرض الملف والإجازات)',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: isTerminated
+                                                    ? Colors.red.shade900
+                                                    : (isSeconded ? Colors.brown.shade800 : (hasActiveLeave ? Colors.blue.shade900 : Colors.grey.shade700)),
+                                              ),
+                                            ),
+                                          ),
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons.assignment_ind_rounded, color: AppColors.navy),
+                                                tooltip: 'عرض الملف وسجل الإجازات والتنقلات',
+                                                onPressed: () => _showEmployeeProfileDialog(emp),
+                                              ),
+                                              if (auth.isSuperAdmin) ...[
                                         // زر النقل بين الأقسام
                                         IconButton(
                                           icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
@@ -665,7 +721,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                     ],
                                   ),
                                 ),
-                              );
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
                             },
                           ),
           ),
