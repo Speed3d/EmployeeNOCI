@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>الموسوعة الهيكلية والمعمارية الحية | نظام كشف حضور وانصراف موظفي المقر</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0a0f1d;
+      --bg-surface: #11192e;
+      --bg-surface-elevated: #18233f;
+      --bg-surface-card: #1e2c4f;
+      --border-color: #273860;
+      --border-focus: #3b82f6;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-light: rgba(59, 130, 246, 0.15);
+      --success: #10b981;
+      --success-light: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --warning-light: rgba(245, 158, 11, 0.15);
+      --danger: #ef4444;
+      --danger-light: rgba(239, 68, 68, 0.15);
+      --purple: #8b5cf6;
+      --purple-light: rgba(139, 92, 246, 0.15);
+      --gold: #eab308;
+      --font-main: 'Tajawal', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+      --shadow-sm: 0 2px 4px rgba(0,0,0,0.25);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.45);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-base);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary);
+    }
+
+    /* Header */
+    header {
+      background: rgba(17, 25, 46, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+    }
+
+    .header-container {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-logo {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .brand-info h1 {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .brand-info p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-success { background: var(--success-light); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-primary { background: var(--primary-light); color: var(--primary); border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-warning { background: var(--warning-light); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-danger  { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-purple  { background: var(--purple-light); color: var(--purple); border: 1px solid rgba(139, 92, 246, 0.3); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .search-box {
+      position: relative;
+      min-width: 320px;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-color);
+      padding: 0.6rem 1rem 0.6rem 2.5rem;
+      border-radius: var(--radius-md);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      font-size: 0.9rem;
+      transition: var(--transition);
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+      background: var(--bg-surface-card);
+    }
+
+    .search-box .search-icon {
+      position: absolute;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    /* KPI Stats Bar */
+    .stats-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1.25rem 2rem;
+    }
+
+    .stats-container {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .stat-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: var(--transition);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--border-focus);
+      box-shadow: var(--shadow-md);
+    }
+
+    .stat-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+    }
+
+    .stat-info .stat-value {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .stat-info .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    /* Main Layout */
+    .app-body {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 2rem;
+      flex: 1;
+      width: 100%;
+    }
+
+    @media (max-width: 1024px) {
+      .app-body {
+        grid-template-columns: 1fr;
+        padding: 1rem;
+      }
+    }
+
+    /* Sidebar Navigation */
+    .sidebar-nav {
+      position: sticky;
+      top: 6rem;
+      height: fit-content;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .nav-title {
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 0.85rem;
+      padding-right: 0.5rem;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .nav-item button {
+      width: 100%;
+      text-align: right;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-md);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-family: var(--font-main);
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: var(--transition);
+    }
+
+    .nav-item button:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+    }
+
+    .nav-item button.active {
+      background: var(--primary-light);
+      border-color: rgba(59, 130, 246, 0.4);
+      color: var(--primary);
+    }
+
+    .nav-item .nav-count {
+      margin-right: auto;
+      font-size: 0.75rem;
+      background: var(--bg-surface-card);
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      color: var(--text-dim);
+    }
+
+    .nav-item button.active .nav-count {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* Main Content Area */
+    .content-area {
+      min-width: 0;
+    }
+
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.3s ease forwards;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Section Cards */
+    .section-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .section-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .section-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 0.3rem;
+    }
+
+    /* File Tree Component */
+    .tree-toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-main);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: var(--transition);
+    }
+
+    .btn:hover {
+      background: var(--bg-surface-card);
+      border-color: var(--border-focus);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .tree-view {
+      background: var(--bg-base);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .tree-node {
+      margin-left: 0.5rem;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      user-select: none;
+      transition: var(--transition);
+    }
+
+    .tree-item:hover {
+      background: var(--bg-surface-elevated);
+    }
+
+    .tree-item.folder {
+      font-weight: 600;
+      color: var(--gold);
+    }
+
+    .tree-item.file {
+      color: var(--text-muted);
+    }
+
+    .tree-item.file:hover {
+      color: var(--primary);
+    }
+
+    .tree-children {
+      margin-right: 1.5rem;
+      border-right: 1px dashed var(--border-color);
+      padding-right: 0.5rem;
+    }
+
+    .tree-children.collapsed {
+      display: none;
+    }
+
+    .tag-active {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      background: var(--success-light);
+      color: var(--success);
+      border-radius: 4px;
+      margin-right: auto;
+    }
+
+    .tag-future {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      background: var(--purple-light);
+      color: var(--purple);
+      border-radius: 4px;
+      margin-right: auto;
+    }
+
+    /* Grid of Cards */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--primary);
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .code-badge {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      background: var(--bg-base);
+      color: #38bdf8;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .card-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .card-links {
+      background: var(--bg-base);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .card-links-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-links-label {
+      color: var(--text-dim);
+      font-weight: 700;
+      min-width: 60px;
+    }
+
+    .card-why {
+      font-size: 0.82rem;
+      color: #a7f3d0;
+      background: rgba(16, 185, 129, 0.08);
+      border-right: 3px solid var(--success);
+      padding: 0.6rem 0.8rem;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    /* Traceability Table */
+    .table-responsive {
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: right;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      font-weight: 700;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    tr:hover td {
+      background: rgba(59, 130, 246, 0.04);
+      color: var(--text-main);
+    }
+
+    .badge-route {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.2rem 0.45rem;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge-route.post { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .badge-route.get { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-route.put { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-route.del { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    /* Modal Detail Sheet */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      max-width: 700px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+      padding: 2rem;
+      animation: modalScale 0.25s ease forwards;
+    }
+
+    @keyframes modalScale {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 1.5rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close:hover { color: var(--text-main); }
+
+    /* Footer */
+    footer {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-color);
+      padding: 2rem;
+      margin-top: auto;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-container">
+      <div class="brand-section">
+        <div class="brand-logo">🏛️</div>
+        <div class="brand-info">
+          <h1>
+            الموسوعة المعمارية الحية لنظام كشف الحضور
+            <span class="badge badge-success">إصدار الإنتاج 2.0.0</span>
+          </h1>
+          <p>اللجنة الأولمبية الوطنية العراقية (NOCI) • توثيق تفاعلي لحظي محدّث ومطابق للكود</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="search-box">
+          <input type="text" id="globalSearch" placeholder="ابحث عن ملف، دالة، مسار API، أو متغير...">
+          <span class="search-icon">🔍</span>
+        </div>
+        <a href="http://localhost:5000" target="_blank" class="btn btn-primary">
+          <span>🚀 فتح النظام الحي (5000)</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- KPI Stats Bar -->
+  <div class="stats-bar">
+    <div class="stats-container">
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--primary-light); color: var(--primary);">📱</div>
+        <div class="stat-info">
+          <div class="stat-value">22+ شاشة وويدجت</div>
+          <div class="stat-label">واجهة فلاتر (Web & Desktop)</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--success-light); color: var(--success);">⚙️</div>
+        <div class="stat-info">
+          <div class="stat-value">32 مسار API</div>
+          <div class="stat-label">Express.js & REST Endpoints</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--purple-light); color: var(--purple);">🧠</div>
+        <div class="stat-info">
+          <div class="stat-value">محرك الذكاء الاصطناعي</div>
+          <div class="stat-label">attendanceEngine (أوف، تأخير، إجازات)</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--warning-light); color: var(--warning);">🛡️</div>
+        <div class="stat-info">
+          <div class="stat-value">0 مشاكل في VS Code</div>
+          <div class="stat-label">No issues found (100% Clean)</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(234, 179, 8, 0.15); color: var(--gold);">💾</div>
+        <div class="stat-info">
+          <div class="stat-value">SQLite WAL مشفر</div>
+          <div class="stat-label">AES-256-GCM + Bcrypt</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="app-body">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar-nav">
+      <div class="nav-title">أقسام الموسوعة المعمارية</div>
+      <ul class="nav-list">
+        <li class="nav-item">
+          <button class="active" onclick="switchTab('treeTab', this)">
+            <span>🌳 الشجرة الهيكلية المنقحة</span>
+            <span class="nav-count">الملفات</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button onclick="switchTab('frontendTab', this)">
+            <span>📱 الواجهة الأمامية (Flutter)</span>
+            <span class="nav-count">app/lib</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button onclick="switchTab('backendTab', this)">
+            <span>⚙️ الخادم ومحرك الذكاء</span>
+            <span class="nav-count">backend/src</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button onclick="switchTab('matrixTab', this)">
+            <span>🔗 مصفوفة الارتباط التتبعي</span>
+            <span class="nav-count">Traceability</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button onclick="switchTab('identifiersTab', this)">
+            <span>📖 قاموس المعرفات والمتغيرات</span>
+            <span class="nav-count">Dictionary</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button onclick="switchTab('scriptsTab', this)">
+            <span>🚀 السكربتات وأوامر التشغيل</span>
+            <span class="nav-count">BAT / VBS</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button onclick="switchTab('auditTab', this)">
+            <span>⚖️ الجرد: الفعال مقابل المؤجل</span>
+            <span class="nav-count">Inventory</span>
+          </button>
+        </li>
+      </ul>
+    </aside>
+
+    <!-- Main Content Panes -->
+    <main class="content-area">
+
+      <!-- TAB 1: Tree View -->
+      <section id="treeTab" class="tab-pane active">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">🌳 الشجرة الهيكلية المنقحة والمعتمدة (Clean File Tree)</h2>
+              <p class="section-subtitle">شجرة فيزيائية تفاعلية للمشروع بدون أي مجلدات مكررة أو تالفة. انقر على المجلد لفتحه أو طيّه.</p>
+            </div>
+            <div class="tree-toolbar">
+              <button class="btn" onclick="expandAllTree()">توسيع الكل ➕</button>
+              <button class="btn" onclick="collapseAllTree()">طي الكل ➖</button>
+            </div>
+          </div>
+
+          <div class="tree-view" id="interactiveTree">
+            <!-- Root -->
+            <div class="tree-node">
+              <div class="tree-item folder" onclick="toggleNode(this)">
+                <span>📁 D:\Employee NOCI</span>
+                <span class="badge badge-primary">المجلد الجذري للمشروع</span>
+              </div>
+              <div class="tree-children">
+
+                <!-- APP -->
+                <div class="tree-node">
+                  <div class="tree-item folder" onclick="toggleNode(this)">
+                    <span>📁 app/</span>
+                    <span class="badge badge-success">تطبيق فلاتر</span>
+                  </div>
+                  <div class="tree-children">
+                    <!-- lib -->
+                    <div class="tree-node">
+                      <div class="tree-item folder" onclick="toggleNode(this)">
+                        <span>📁 lib/</span>
+                        <span class="badge badge-success">الشيفرة المصدرية Dart</span>
+                      </div>
+                      <div class="tree-children">
+                        <div class="tree-node">
+                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 core/</span></div>
+                          <div class="tree-children">
+                            <div class="tree-item file" onclick="showFileDetail('api_client')"><span>📄 api_client.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('auth_provider')"><span>📄 auth_provider.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('constants')"><span>📄 constants.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('theme')"><span>📄 theme.dart</span><span class="tag-active">نشط</span></div>
+                          </div>
+                        </div>
+                        <div class="tree-node">
+                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 features/</span></div>
+                          <div class="tree-children">
+                            <div class="tree-item file" onclick="showFileDetail('attendance_screen')"><span>📄 attendance_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('employees_screen')"><span>📄 employees_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('leaves_screen')"><span>📄 leaves_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('schedules_screen')"><span>📄 schedules_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('chat_screen')"><span>📄 chat_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('settings_screen')"><span>📄 settings_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('reports_screen')"><span>📄 reports_screen.dart</span><span class="tag-active">نشط</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('dashboard_screen')"><span>📄 dashboard_screen.dart</span><span class="tag-active">نشط</span></div>
+                          </div>
+                        </div>
+                        <div class="tree-node">
+                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 shared/</span></div>
+                          <div class="tree-children">
+                            <div class="tree-item file"><span>📄 custom_button.dart</span></div>
+                            <div class="tree-item file"><span>📄 kpi_card.dart</span></div>
+                            <div class="tree-item file"><span>📄 main_layout.dart</span></div>
+                            <div class="tree-item file"><span>📄 status_badge.dart</span></div>
+                          </div>
+                        </div>
+                        <div class="tree-item file"><span>📄 main.dart</span><span class="tag-active">نقطة الانطلاق</span></div>
+                      </div>
+                    </div>
+
+                    <!-- platforms -->
+                    <div class="tree-node">
+                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 web/</span><span class="tag-active">نشط (Production)</span></div>
+                    </div>
+                    <div class="tree-node">
+                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 windows/</span><span class="tag-future">مجهز لسطح المكتب</span></div>
+                    </div>
+                    <div class="tree-node">
+                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 android / ios / macos / linux/</span><span class="tag-future">مجهز للمستقبل</span></div>
+                    </div>
+                    <div class="tree-item file"><span>⚙️ analysis_options.yaml</span><span class="tag-active">0 Issues</span></div>
+                    <div class="tree-item file"><span>⚙️ pubspec.yaml</span></div>
+                  </div>
+                </div>
+
+                <!-- BACKEND -->
+                <div class="tree-node">
+                  <div class="tree-item folder" onclick="toggleNode(this)">
+                    <span>📁 backend/</span>
+                    <span class="badge badge-purple">خادم Node.js & Express</span>
+                  </div>
+                  <div class="tree-children">
+                    <div class="tree-node">
+                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 data/</span></div>
+                      <div class="tree-children">
+                        <div class="tree-item file"><span>💾 attendance.db (قاعدة البيانات المشفرة)</span><span class="tag-active">نشط</span></div>
+                        <div class="tree-item file"><span>📁 backups/ (النسخ الاحتياطية)</span></div>
+                        <div class="tree-item file"><span>📁 branding/ (شعارات المؤسسة)</span></div>
+                        <div class="tree-item file"><span>📁 temp_uploads/ (معالجة مؤقتة)</span></div>
+                      </div>
+                    </div>
+                    <div class="tree-node">
+                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 src/</span></div>
+                      <div class="tree-children">
+                        <div class="tree-node">
+                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 core/</span></div>
+                          <div class="tree-children">
+                            <div class="tree-item file" onclick="showFileDetail('database')"><span>📄 database.js</span><span class="tag-active">SQLite WAL</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('crypto')"><span>📄 cryptoHelper.js</span><span class="tag-active">AES-256 + Bcrypt</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('auth_mid')"><span>📄 authMiddleware.js</span><span class="tag-active">الصيانة والتوكن</span></div>
+                            <div class="tree-item file" onclick="showFileDetail('audit')"><span>📄 auditLogger.js</span><span class="tag-active">التدقيق الأمني</span></div>
+                          </div>
+                        </div>
+                        <div class="tree-node">
+                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 features/</span></div>
+                          <div class="tree-children">
+                            <div class="tree-item file" onclick="showFileDetail('engine')"><span>🧠 attendanceEngine.js</span><span class="tag-active">خوارزمية الذكاء</span></div>
+                            <div class="tree-item file"><span>📄 attendanceController.js & Routes</span></div>
+                            <div class="tree-item file"><span>📄 employeeController.js & Routes</span></div>
+                            <div class="tree-item file"><span>📄 settingController.js & Routes</span></div>
+                            <div class="tree-item file"><span>📄 backupController.js & Routes</span></div>
+                            <div class="tree-item file"><span>📄 chatController.js & Routes</span></div>
+                            <div class="tree-item file"><span>📄 leaveController.js & Routes</span></div>
+                            <div class="tree-item file"><span>📄 scheduleController.js & Routes</span></div>
+                          </div>
+                        </div>
+                        <div class="tree-item file"><span>📄 app.js</span><span class="tag-active">سيرفر المنفذ 5000</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ROOT SCRIPTS -->
+                <div class="tree-item file" onclick="showFileDetail('run_bat')"><span>⚡ تشغيل النظام.bat</span><span class="tag-active">تشغيل تلقائي</span></div>
+                <div class="tree-item file" onclick="showFileDetail('stop_bat')"><span>🛑 إيقاف النظام.bat</span><span class="tag-active">إغلاق آمن</span></div>
+                <div class="tree-item file"><span>📝 PROJECT_RULES.md</span></div>
+                <div class="tree-item file"><span>📝 README.md</span></div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Frontend Anatomy -->
+      <section id="frontendTab" class="tab-pane">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">📱 التشريح المفصل للواجهة الأمامية (Flutter Architecture)</h2>
+              <p class="section-subtitle">شرح وظيفي ومعماري لكل شاشة وويدجت، بماذا ترتبط ولماذا صممت بهذه الشاكلة.</p>
+            </div>
+          </div>
+
+          <div class="cards-grid">
+            <!-- Card 1 -->
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">
+                  <span>كشف الحضور والتحليل</span>
+                </div>
+                <span class="code-badge">attendance_screen.dart</span>
+              </div>
+              <p class="card-desc">الشاشة التشغيلية اليومية لمدخل البيانات والسوبر أدمن. تعرض تفاصيل حضور وانصراف الموظفين لليوم المختار مع إحصائيات سريعة وأزرار الاعتماد وتعديل الوقت.</p>
+              <div class="card-links">
+                <div class="card-links-row">
+                  <span class="card-links-label">المسارات:</span>
+                  <span class="badge-route post">POST /api/attendance/approve</span>
+                  <span class="badge-route get">GET /api/attendance/sheets/:date</span>
+                </div>
+                <div class="card-links-row">
+                  <span class="card-links-label">الجداول:</span>
+                  <span>daily_sheets, attendance_records</span>
+                </div>
+              </div>
+              <div class="card-why">
+                <strong>لماذا صممت هكذا؟</strong> لفصل مرحلة قراءة البصمات في الذاكرة عن مرحلة الحفظ الدائم، مع حظر إعادة اعتماد كشف سبق اعتماده إلا بإذن السوبر أدمن الصريح.
+              </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">
+                  <span>سجل الموظفين الذكي</span>
+                </div>
+                <span class="code-badge">employees_screen.dart</span>
+              </div>
+              <p class="card-desc">سجل الأسماء المعتمد للمقر، مزود بخاصية التلوين الذكي التلقائي للخلايا (أزرق للإجازة السارية، برتقالي للتنسيب، أحمر للمتوفى أو منتهي الخدمة، رمادي لـ VIP).</p>
+              <div class="card-links">
+                <div class="card-links-row">
+                  <span class="card-links-label">المسارات:</span>
+                  <span class="badge-route get">GET /api/employees</span>
+                  <span class="badge-route put">PUT /api/employees/:id</span>
+                </div>
+                <div class="card-links-row">
+                  <span class="card-links-label">الجداول:</span>
+                  <span>employees, leave_requests, system_settings</span>
+                </div>
+              </div>
+              <div class="card-why">
+                <strong>لماذا صممت هكذا؟</strong> لتمكين مسؤول الموارد البشرية من مسح حالات مئات الموظفين بصرياً في ثانية واحدة دون فتح ملفاتهم بشكل منفرد.
+              </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">
+                  <span>إدارة قوالب وجداول الدوام</span>
+                </div>
+                <span class="code-badge">schedules_screen.dart</span>
+              </div>
+              <p class="card-desc">تتيح لمدخل البيانات والسوبر أدمن إدارة شفتات الموظفين وتخصيص أيام الراحة الأسبوعية (يوم، يومين، أو أكثر). وتحتوي على زر مقفل لإدارة القوالب المركزية.</p>
+              <div class="card-links">
+                <div class="card-links-row">
+                  <span class="card-links-label">المسارات:</span>
+                  <span class="badge-route get">GET /api/schedules</span>
+                  <span class="badge-route post">POST /api/schedules/batch</span>
+                </div>
+                <div class="card-links-row">
+                  <span class="card-links-label">الجداول:</span>
+                  <span>work_schedules, schedule_templates</span>
+                </div>
+              </div>
+              <div class="card-why">
+                <strong>لماذا صممت هكذا؟</strong> زر "إدارة قوالب الدوام" لا يظهر لمدخل البيانات منعاً لتغيير ساعات الدوام الرسمية للمؤسسة، مع إتاحة حرية توزيع الموظفين أسبوعياً.
+              </div>
+            </div>
+
+            <!-- Card 4 -->
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">
+                  <span>المحادثات وسجل الرقابة</span>
+                </div>
+                <span class="code-badge">chat_screen.dart</span>
+              </div>
+              <p class="card-desc">تواصل فوري مشفر بين المستخدمين مع شارة إشعار بالرسائل الجديدة، وقسم خاص بسجل الرقابة الشاملة للسوبر أدمن محمي بتأكيد كلمة المرور الحية.</p>
+              <div class="card-links">
+                <div class="card-links-row">
+                  <span class="card-links-label">المسارات:</span>
+                  <span class="badge-route post">POST /api/chat/verify-superadmin</span>
+                  <span class="badge-route get">GET /api/chat/messages</span>
+                </div>
+                <div class="card-links-row">
+                  <span class="card-links-label">الجداول:</span>
+                  <span>chat_messages (AES-256-GCM Encrypted)</span>
+                </div>
+              </div>
+              <div class="card-why">
+                <strong>لماذا صممت هكذا؟</strong> لحماية خصوصية المحادثات ومطابقة اللوائح الأمنية المشددة بحيث لا يمكن لأحد استراق النظر حتى لو كان جهاز السوبر أدمن مفتوحاً.
+              </div>
+            </div>
+
+            <!-- Card 5 -->
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">
+                  <span>الإعدادات والنسخ الاحتياطي</span>
+                </div>
+                <span class="code-badge">settings_screen.dart</span>
+              </div>
+              <p class="card-desc">تحكم كامل بالهوية المؤسسية، تخصيص درجات ألوان الحالات، تفعيل وضع الصيانة، وأخذ نسخ احتياطية وتنزيلها واستعادتها بكلمة سر مؤكدة.</p>
+              <div class="card-links">
+                <div class="card-links-row">
+                  <span class="card-links-label">المسارات:</span>
+                  <span class="badge-route post">POST /api/backup/create</span>
+                  <span class="badge-route post">POST /api/backup/restore</span>
+                </div>
+                <div class="card-links-row">
+                  <span class="card-links-label">الجداول:</span>
+                  <span>system_settings, database dump</span>
+                </div>
+              </div>
+              <div class="card-why">
+                <strong>لماذا صممت هكذا؟</strong> لتوفير لوحة تحكم سيادية شاملة للسوبر أدمن تضمن استمرارية العمل ومنع ضياع البيانات تحت أي ظرف طارئ.
+              </div>
+            </div>
+
+            <!-- Card 6 -->
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">
+                  <span>تسجيل الدخول ووضع الصيانة</span>
+                </div>
+                <span class="code-badge">login_screen.dart & maintenance_screen.dart</span>
+              </div>
+              <p class="card-desc">تسجيل دخول آمن بحقول فارغة افتراضياً، مع خيار "تذكر بياناتي" عبر التخزين المحلي، واعتراض فوري وإظهار شاشة الصيانة إذا كان النظام تحت الصيانة.</p>
+              <div class="card-links">
+                <div class="card-links-row">
+                  <span class="card-links-label">المسارات:</span>
+                  <span class="badge-route post">POST /api/auth/login</span>
+                  <span class="badge-route get">GET /api/system/status</span>
+                </div>
+                <div class="card-links-row">
+                  <span class="card-links-label">الجداول:</span>
+                  <span>users, SharedPreferences</span>
+                </div>
+              </div>
+              <div class="card-why">
+                <strong>لماذا صممت هكذا؟</strong> لمنع أي مستخدم عادي من محاولة إدخال بيانات أثناء ترقية النظام أو جرد البيانات السنوي.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Backend & Engine -->
+      <section id="backendTab" class="tab-pane">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">⚙️ الخادم ومحرك الذكاء الاصطناعي (Backend & Intelligence Engine)</h2>
+              <p class="section-subtitle">شرح آليات المعالجة الرياضية وقواعد البيانات والتشفير العسكري.</p>
+            </div>
+          </div>
+
+          <div class="cards-grid">
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">🧠 محرك احتساب الحضور الذكي</div>
+                <span class="code-badge">attendanceEngine.js</span>
+              </div>
+              <p class="card-desc">العقل المفكر للنظام؛ يحلل أوقات الدوام مقابل البصمة المسجلة، ويحسب دقائق التأخير بعد اقتطاع فترة السماح، ويفحص سجلات الإجازات لليوم تلقائياً لعدم احتساب المجاز غائباً، ويضع ملاحظة على من يبصم في يوم راحته الأسبوعية (الأوف).</p>
+              <div class="card-why">
+                <strong>الربط المعماري:</strong> يُستدعى من `attendanceController.js` أثناء معالجة ملف الإكسل المرفوع، ويغذي واجهة الكشف بمصفوفة النتائج الجاهزة.
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">🛡️ التشفير العسكري الثنائي</div>
+                <span class="code-badge">cryptoHelper.js</span>
+              </div>
+              <p class="card-desc">يطبق تشفير AES-256-GCM للبيانات الحساسة والمحادثات مع قيمة IV فريدة لكل رسالة مشفرة، وتجزئة كلمات المرور عبر Bcrypt مع 10 جولات تمليح (Salt).</p>
+              <div class="card-why">
+                <strong>الربط المعماري:</strong> يحمي بيانات موظفي المقر من أي محاولة تسريب أو فتح مباشر لملف قاعدة البيانات خارج النظام.
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">💾 محرك SQLite عالي السرعة</div>
+                <span class="code-badge">database.js</span>
+              </div>
+              <p class="card-desc">اتصال دائم عبر مكتبة better-sqlite3 المفعلة لوضع WAL (Write-Ahead Logging)، مع بناء تلقائي للجداول العشرة والمؤشرات لتسريع الاستعلامات المعقدة في أجزاء من الألف من الثانية.</p>
+              <div class="card-why">
+                <strong>الربط المعماري:</strong> هو المستودع المركزي الذي تستند عليه كافة وحدات التحكم لقراءة وتعديل البيانات محلياً.
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">🚦 جدار الحماية والتحقق</div>
+                <span class="code-badge">authMiddleware.js</span>
+              </div>
+              <p class="card-desc">يعترض كل طلب وارد للسيرفر: يتحقق من صلاحية التوكن JWT، ويتحقق مما إذا كان وضع الصيانة مفعلاً لحظر مدخلي البيانات فوراً وإرجاع كود 503.</p>
+              <div class="card-why">
+                <strong>الربط المعماري:</strong> يحمي كل المسارات الحساسة ويمنع أي وصول غير مصرح للمعلومات الإدارية.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Traceability Matrix -->
+      <section id="matrixTab" class="tab-pane">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">🔗 مصفوفة الارتباط التتبعي الشامل (End-to-End Traceability Matrix)</h2>
+              <p class="section-subtitle">جدول يربط بين كل زر وشاشة في فلاتر والمسار والوحدة والجدول المعني ولماذا تم ربطها بهذا الشكل.</p>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table id="matrixTable">
+              <thead>
+                <tr>
+                  <th>العملية والوظيفة</th>
+                  <th>شاشة فلاتر (Frontend Widget)</th>
+                  <th>مزود الخدمة</th>
+                  <th>مسار الـ API (Express Route)</th>
+                  <th>وحدة التحكم (Controller)</th>
+                  <th>جدول قاعدة البيانات (SQLite)</th>
+                  <th>السبب الهندسي والمنطقي للربط</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>تسجيل الدخول</strong></td>
+                  <td><code>login_screen.dart</code></td>
+                  <td>AuthProvider</td>
+                  <td><span class="badge-route post">POST /api/auth/login</span></td>
+                  <td>authController.login</td>
+                  <td><code>users</code></td>
+                  <td>مطابقة كلمة السر بـ Bcrypt وتوليد JWT لتحديد هوية وصلاحيات الجلسة.</td>
+                </tr>
+                <tr>
+                  <td><strong>تذكر الحساب</strong></td>
+                  <td><code>login_screen.dart</code> (Checkbox)</td>
+                  <td>SharedPreferences</td>
+                  <td><span class="badge badge-primary">Client-side Local</span></td>
+                  <td>محلي في المتصفح</td>
+                  <td><code>localStorage</code></td>
+                  <td>حفظ بيانات المستخدم في المتصفح لعدم طلبها مجدداً عند إعادة التحميل.</td>
+                </tr>
+                <tr>
+                  <td><strong>رفع كشف البصمة</strong></td>
+                  <td><code>upload_dialog.dart</code></td>
+                  <td>ApiClient.uploadMultipart</td>
+                  <td><span class="badge-route post">POST /api/attendance/analyze-upload</span></td>
+                  <td>attendanceController.analyzeUpload</td>
+                  <td><code>temp_uploads</code></td>
+                  <td>تحليل إكسل البصمة في الذاكرة دون تخزينه حتى يوافق المستخدم على الكشف.</td>
+                </tr>
+                <tr>
+                  <td><strong>اعتماد وحفظ الكشف</strong></td>
+                  <td><code>attendance_screen.dart</code></td>
+                  <td>ApiClient.post</td>
+                  <td><span class="badge-route post">POST /api/attendance/approve</span></td>
+                  <td>attendanceController.approveSheet</td>
+                  <td><code>daily_sheets, attendance_records</code></td>
+                  <td>تثبيت بيانات اليوم، ومنع التعديل إلا للسوبر أدمن أو من يملك صلاحية منه.</td>
+                </tr>
+                <tr>
+                  <td><strong>تلوين سجل الموظفين</strong></td>
+                  <td><code>employees_screen.dart</code></td>
+                  <td>ApiClient.get</td>
+                  <td><span class="badge-route get">GET /api/employees</span></td>
+                  <td>employeeController.getEmployees</td>
+                  <td><code>employees, leave_requests</code></td>
+                  <td>فحص تاريخ اليوم لاكتشاف الإجازات السارية أو التنسيب وتلوين الخلية تلقائياً.</td>
+                </tr>
+                <tr>
+                  <td><strong>تخصيص ألوان الحالات</strong></td>
+                  <td><code>settings_screen.dart</code></td>
+                  <td>ApiClient.put</td>
+                  <td><span class="badge-route put">PUT /api/settings/colors</span></td>
+                  <td>settingController.updateColors</td>
+                  <td><code>system_settings (status_colors)</code></td>
+                  <td>منح السوبر أدمن مرونة تامة لتعديل درجات الألوان بما يتوافق مع الإدارة.</td>
+                </tr>
+                <tr>
+                  <td><strong>حفظ وضع الصيانة</strong></td>
+                  <td><code>settings_screen.dart</code></td>
+                  <td>ApiClient.post</td>
+                  <td><span class="badge-route post">POST /api/settings/maintenance</span></td>
+                  <td>settingController.toggleMaintenance</td>
+                  <td><code>system_settings (is_maintenance)</code></td>
+                  <td>إغلاق النظام فورياً أمام المستخدمين العاديين أثناء التحديثات أو الجرد.</td>
+                </tr>
+                <tr>
+                  <td><strong>فك قفل الرقابة</strong></td>
+                  <td><code>chat_screen.dart</code></td>
+                  <td>ApiClient.post</td>
+                  <td><span class="badge-route post">POST /api/chat/verify-superadmin</span></td>
+                  <td>chatController.verifySuperAdmin</td>
+                  <td><code>users</code></td>
+                  <td>اشتراط كلمة مرور حية للسوبر أدمن قبل إظهار المحادثات لمنع التسلل.</td>
+                </tr>
+                <tr>
+                  <td><strong>النسخ الاحتياطي الفوري</strong></td>
+                  <td><code>settings_screen.dart</code></td>
+                  <td>ApiClient.post</td>
+                  <td><span class="badge-route post">POST /api/backup/create</span></td>
+                  <td>backupController.createBackup</td>
+                  <td><code>attendance.db dump</code></td>
+                  <td>تصدير نسخة كاملة آمنة من قاعدة البيانات وتخزينها محلياً مع خيار التنزيل.</td>
+                </tr>
+                <tr>
+                  <td><strong>استعادة نسخة سابقة</strong></td>
+                  <td><code>settings_screen.dart</code></td>
+                  <td>ApiClient.uploadMultipart</td>
+                  <td><span class="badge-route post">POST /api/backup/restore</span></td>
+                  <td>backupController.restoreBackup</td>
+                  <td><code>attendance.db replacement</code></td>
+                  <td>التعافي من أي خطأ غير مقصود بملف خارجي مع اشتراط إدخال كلمة سر السوبر أدمن.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: Identifiers Dictionary -->
+      <section id="identifiersTab" class="tab-pane">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">📖 قاموس المعرفات، المتغيرات الحاكمة، والرموز المشفرة</h2>
+              <p class="section-subtitle">شرح دقيق لكل معرّف ومتحول أساسي في قاعدة البيانات والشيفرة المصدرية.</p>
+            </div>
+          </div>
+
+          <div class="cards-grid">
+            <div class="feature-card">
+              <div class="card-top">
+                <span class="code-badge">emp_id</span>
+                <span class="badge badge-primary">Integer / Primary Key</span>
+              </div>
+              <p class="card-desc">المعرف الرقمي التسلسلي الفريد للموظف داخل قاعدة بيانات النظام، يربط كل سجلات الإجازات وجداول الدوام بملف الموظف.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <span class="code-badge">fingerprint_id</span>
+                <span class="badge badge-warning">Integer / Unique Index</span>
+              </div>
+              <p class="card-desc">رقم بصمة الموظف المسجل في جهاز البصمة الحقيقي، وهو الرابط الجوهري لمطابقة كشف الإكسل مع اسم الموظف وسجله في المقر.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <span class="code-badge">status</span>
+                <span class="badge badge-purple">Enum Text</span>
+              </div>
+              <p class="card-desc">حالة الموظف الحالية: <code>active</code> (ملاك المقر)، <code>seconded</code> / <code>تنسيب</code> (منسب)، <code>terminated</code> (إنهاء خدمة)، <code>deceased</code> (متوفى)، أو <code>vip</code>.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <span class="code-badge">is_maintenance</span>
+                <span class="badge badge-danger">Boolean (0 or 1)</span>
+              </div>
+              <p class="card-desc">المتغير العام للنظام في جدول <code>system_settings</code>؛ إذا كان 1 يتم حظر مدخلي البيانات فوراً وتحويلهم لشاشة الصيانة.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <span class="code-badge">delay_minutes</span>
+                <span class="badge badge-warning">Integer</span>
+              </div>
+              <p class="card-desc">دقائق التأخير الصافية المحسوبة بعد خصم فترة السماح المحددة في جدول الدوام لليوم المعني.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <span class="code-badge">status_colors</span>
+                <span class="badge badge-success">JSON Text</span>
+              </div>
+              <p class="card-desc">كائن JSON مخزن في جدول الإعدادات يحتوي على شفرات ألوان Hex التي يحددها السوبر أدمن لتلوين خلايا سجل الموظفين.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: Scripts & Operations -->
+      <section id="scriptsTab" class="tab-pane">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">🚀 دليل السكربتات وأوامر التشغيل والأتمتة</h2>
+              <p class="section-subtitle">شرح مفصل لكيفية تشغيل وإيقاف النظام وأتمتة الخدمات الخلفية.</p>
+            </div>
+          </div>
+
+          <div class="cards-grid">
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">تشغيل النظام بنقرة واحدة</div>
+                <span class="code-badge">تشغيل النظام.bat</span>
+              </div>
+              <p class="card-desc">يتحقق من خلو المنفذ 5000 وينهي أي عملية معلقة قديمة، ثم يشغل مخدم Node.js في الخلفية، ويتأكد من وصول حالة السيرفر إلى ONLINE 200 OK، ثم يفتح المتصفح الافتراضي تلقائياً على http://localhost:5000.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">إيقاف النظام الآمن</div>
+                <span class="code-badge">إيقاف النظام.bat</span>
+              </div>
+              <p class="card-desc">يبحث عن معرّف العملية (PID) النشطة على المنفذ 5000 ويغلقها فوراً بصورة نظيفة لتحرير موارد الجهاز ومنع أي استهلاك غير مرغوب للذاكرة العشوائية.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">التشغيل الصامت تماماً</div>
+                <span class="code-badge">toolkit/run-silent.vbs</span>
+              </div>
+              <p class="card-desc">سكربت VBScript مرن يقوم بتشغيل السيرفر في خلفية ويندوز دون إظهار الشاشة السوداء (CMD Window) على شاشة المستخدم.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-top">
+                <div class="card-title">خدمة بدء التشغيل التلقائي</div>
+                <span class="code-badge">toolkit/install-startup-service.bat</span>
+              </div>
+              <p class="card-desc">يسجل البرنامج في قائمة البرامج التي تبدأ تلقائياً مع إقلاع نظام ويندوز، ليعمل النظام فور تشغيل كمبيوتر الإدارة دون تدخل بشري.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 7: Active vs Future Audit -->
+      <section id="auditTab" class="tab-pane">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">⚖️ الجرد الشامل: العناصر الفعالة مقابل المؤجلة للمستقبل</h2>
+              <p class="section-subtitle">شفافية كاملة حول ما يعمل بالإنتاج حالياً بنسبة 100% وما هو مجهز للاستثمار المستقبلي.</p>
+            </div>
+          </div>
+
+          <div class="cards-grid">
+            <div class="feature-card" style="border-right: 4px solid var(--success);">
+              <div class="card-top">
+                <div class="card-title">🟢 المكونات الفعالة والنشطة بالإنتاج (100% Active)</div>
+              </div>
+              <ul style="padding-right: 1.25rem; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;">
+                <li><strong>تطبيق الويب (Flutter Web):</strong> مجمع في <code>backend/public</code> ويعمل بكفاءة على المتصفح.</li>
+                <li><strong>الخادم المركزي (Express.js):</strong> يستمع على المنفذ 5000 وينفذ كافة عمليات الـ REST.</li>
+                <li><strong>محرك الذكاء الاصطناعي (attendanceEngine):</strong> يحسب الحضور والتأخير والإجازات بدقة.</li>
+                <li><strong>قاعدة البيانات (attendance.db):</strong> نشطة بنمط WAL وتخزن كافة البيانات المشفرة.</li>
+                <li><strong>سكربتات التشغيل والإيقاف:</strong> معتمدة للاستخدام المباشر.</li>
+              </ul>
+            </div>
+
+            <div class="feature-card" style="border-right: 4px solid var(--purple);">
+              <div class="card-top">
+                <div class="card-title">🟣 المنصات المجهزة للاستثمار المستقبلي (Future Ready)</div>
+              </div>
+              <ul style="padding-right: 1.25rem; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;">
+                <li><strong>منصات الموبايل (Android / iOS):</strong> مجلداتها نظيفة ومجهزة؛ يمكن في أي وقت تجميع تطبيق محمول للمشرفين بأمر واحد <code>flutter build apk</code>.</li>
+                <li><strong>منصة سطح المكتب لويندوز (Windows Desktop):</strong> مجهزة في مجلد <code>app/windows</code> للبناء المكتبي التنفيذي المستقل (.exe).</li>
+                <li><strong>سكربتات الفحص القديمة (test_*.js):</strong> محفوظة في <code>backend/scripts</code> كأدوات فحص دورية عند ترقية النظام.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal-backdrop" id="detailModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modalTitle" style="font-size: 1.25rem; font-weight: 800;">تفاصيل العنصر</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div id="modalBody" style="font-size: 0.95rem; line-height: 1.7; color: var(--text-muted);">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>الموسوعة الهيكلية والمعمارية الحية • نظام كشف حضور وانصراف موظفي مقر اللجنة الأولمبية الوطنية العراقية</p>
+    <p style="margin-top: 0.35rem; color: var(--text-dim);">تم التوليد والتزامن البرمجي مع ملف <code>File_Tree_Employee_NOCI.md</code> • مستودع GitHub الفرع <code>main</code></p>
+  </footer>
+
+  <!-- Scripts -->
+  <script>
+    // Tab Switching
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item button').forEach(el => el.classList.remove('active'));
+      const target = document.getElementById(tabId);
+      if (target) {
+        target.classList.add('active');
+        btn.classList.add('active');
+      }
+    }
+
+    // Tree Node Toggle
+    function toggleNode(element) {
+      const parent = element.parentElement;
+      const children = parent.querySelector('.tree-children');
+      if (children) {
+        children.classList.toggle('collapsed');
+      }
+    }
+
+    function expandAllTree() {
+      document.querySelectorAll('.tree-children').forEach(el => el.classList.remove('collapsed'));
+    }
+
+    function collapseAllTree() {
+      document.querySelectorAll('.tree-children').forEach(el => el.classList.add('collapsed'));
+    }
+
+    // Modal Details
+    const fileDetails = {
+      'api_client': {
+        title: 'عميل الاتصال المركزي (api_client.dart)',
+        desc: 'يقوم بتغليف طلبات HTTP ويحقن ترويسة المصادقة Authorization Bearer Token تلقائياً، ويعترض أخطاء انقطاع الاتصال أو وضع الصيانة 503 لإظهار تنبيهات فورية للمستخدم.'
+      },
+      'auth_provider': {
+        title: 'مزود جلسة المستخدم (auth_provider.dart)',
+        desc: 'يدير حالة المستخدم وصلاحياته (سوبر أدمن أو مدخل بيانات) ويحتفظ ببيانات تسجيل الدخول عبر SharedPreferences عند تفعيل خيار تذكر الحساب.'
+      },
+      'attendance_screen': {
+        title: 'شاشة كشف الحضور (attendance_screen.dart)',
+        desc: 'تعرض كشف اليوم، دقائق التأخير باللون الأحمر، الخروج المبكر، الإجازات، وتتيح تعديل الأوقات واعتماد الكشف نهائياً مع حظر إعادة الحفظ إلا بإذن السوبر أدمن.'
+      },
+      'employees_screen': {
+        title: 'سجل الموظفين (employees_screen.dart)',
+        desc: 'السجل العام لموظفي المقر مع التلوين الذكي التلقائي للخلايا (أزرق للإجازة السارية، برتقالي للتنسيب، أحمر للمتوفى أو منتهي الخدمة، رمادي لـ VIP).'
+      },
+      'engine': {
+        title: 'محرك الذكاء الاصطناعي (attendanceEngine.js)',
+        desc: 'العقل الرياضي؛ يطابق بصمات الإكسل مع جداول الدوام والإجازات ويحسب التأخير بالدقائق بعد خصم فترة السماح، ويضع ملاحظة على من يحضر في يوم الأوف.'
+      },
+      'database': {
+        title: 'قاعدة البيانات المسرعة (database.js)',
+        desc: 'تستخدم better-sqlite3 بنمط WAL؛ تبني الجداول والمؤشرات العشرة تلقائياً وتضمن استجابة فائقة السرعة للأجهزة المتعددة.'
+      },
+      'crypto': {
+        title: 'التشفير العسكري الثنائي (cryptoHelper.js)',
+        desc: 'تشفير AES-256-GCM للبيانات الحساسة والمحادثات مع قيمة IV فريدة، وتشفير كلمات المرور عبر Bcrypt بـ 10 جولات تمليح.'
+      },
+      'run_bat': {
+        title: 'زر التشغيل الرئيسي (تشغيل النظام.bat)',
+        desc: 'يحرر المنفذ 5000 ويشغل السيرفر بالخلفية ويتحقق من حالة ONLINE 200 OK ثم يطلق المتصفح الافتراضي تلقائياً.'
+      },
+      'stop_bat': {
+        title: 'زر الإيقاف الآمن (إيقاف النظام.bat)',
+        desc: 'ينهي العملية المستمعة على المنفذ 5000 فورياً ويحرر الذاكرة بنقرة واحدة.'
+      }
+    };
+
+    function showFileDetail(key) {
+      const data = fileDetails[key];
+      if (!data) return;
+      document.getElementById('modalTitle').innerText = data.title;
+      document.getElementById('modalBody').innerText = data.desc;
+      document.getElementById('detailModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').classList.remove('active');
+    }
+
+    // Global Search
+    document.getElementById('globalSearch').addEventListener('input', function(e) {
+      const query = e.target.value.toLowerCase().trim();
+      if (!query) {
+        document.querySelectorAll('.feature-card, #matrixTable tbody tr, .tree-item').forEach(el => el.style.display = '');
+        return;
+      }
+
+      // Filter Cards
+      document.querySelectorAll('.feature-card').forEach(card => {
+        const text = card.innerText.toLowerCase();
+        card.style.display = text.includes(query) ? '' : 'none';
+      });
+
+      // Filter Matrix Rows
+      document.querySelectorAll('#matrixTable tbody tr').forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
+
+      // Filter Tree Items
+      document.querySelectorAll('.tree-item').forEach(item => {
+        const text = item.innerText.toLowerCase();
+        item.style.display = text.includes(query) ? '' : 'none';
+      });
+    });
+
+    // Close modal on click outside
+    document.getElementById('detailModal').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+  </script>
+</body>
+</html>
