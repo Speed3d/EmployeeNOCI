@@ -1226,12 +1226,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   ),
                   const Divider(height: 32),
 
-                  // 2. موظف منسب
+                  // 2. موظف تنسيب
                   _buildColorSettingItem(
-                    title: '2. لون الموظف المنسب (تنسيب)',
-                    subtitle: 'تُطبق على الموظفين المنسبين وفق سجل الحالة الوظيفية',
+                    title: '2. لون موظفي التنسيب (تنسيب)',
+                    subtitle: 'تُطبق على موظفي قسم أو حالة التنسيب في السجل',
                     currentColorHex: _colorSeconded,
-                    palette: const ['#FFF3E0', '#FFF8E1', '#FEF9E7', '#FDEBD0', '#FBEEE6'],
+                    palette: const ['#FFE0B2', '#FFCC80', '#FFF3E0', '#FFD180', '#FFE8D6'],
                     onColorSelected: (val) => setState(() => _colorSeconded = val),
                   ),
                   const Divider(height: 32),
@@ -1274,7 +1274,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                           children: [
                             Expanded(child: _buildMiniCardPreview('مجاز حالياً', '🏖️ إجازة سارية', activeLeaveColor, const Color(0xFF1976D2))),
                             const SizedBox(width: 8),
-                            Expanded(child: _buildMiniCardPreview('موظف منسب', '📋 تنسيب', secondedColor, const Color(0xFFE65100))),
+                            Expanded(child: _buildMiniCardPreview('تنسيب', '📋 تنسيب', secondedColor, const Color(0xFFE65100))),
                             const SizedBox(width: 8),
                             Expanded(child: _buildMiniCardPreview('منتهي خدماته', '🛑 استقالة', terminatedColor, const Color(0xFFD32F2F))),
                             const SizedBox(width: 8),

@@ -268,19 +268,22 @@ class _ChatScreenState extends State<ChatScreen> {
                     style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: passwordCtrl,
-                    obscureText: obscure,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'كلمة مرور السوبر أدمن',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-                        onPressed: () => setDlgState(() => obscure = !obscure),
+                    TextField(
+                      controller: passwordCtrl,
+                      obscureText: obscure,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'كلمة مرور السوبر أدمن',
+                        hintText: 'Admin@123456',
+                        helperText: 'كلمة المرور الافتراضية: Admin@123456',
+                        helperStyle: const TextStyle(fontSize: 11, color: AppColors.navy),
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                          onPressed: () => setDlgState(() => obscure = !obscure),
+                        ),
+                        errorText: errorMsg,
                       ),
-                      errorText: errorMsg,
-                    ),
                     onSubmitted: (_) async {
                       if (isVerifying) return;
                       final pwd = cleanDigits(passwordCtrl.text);

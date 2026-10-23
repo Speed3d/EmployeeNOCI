@@ -22,9 +22,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   String? _selectedDept;
 
   // ألوان تمييز حالات الموظفين القابلة للتخصيص من الإعدادات
-  Color _colorActiveLeave = const Color(0xFFE8F1FC); // أزرق فاتح
-  Color _colorSeconded = const Color(0xFFFFF3E0);    // برتقالي فاتح
-  Color _colorTerminated = const Color(0xFFFFEBEE);  // أحمر فاتح
+  Color _colorActiveLeave = const Color(0xFFE3F2FD); // أزرق فاتح
+  Color _colorSeconded = const Color(0xFFFFE0B2);    // برتقالي فاتح واضح (تنسيب)
+  Color _colorTerminated = const Color(0xFFFFCDD2);  // أحمر فاتح واضح
   Color _colorVipExempt = const Color(0xFFECEFF1);   // رمادي فاتح
 
   static Color parseHex(String? hex, Color fallback) {
@@ -572,12 +572,18 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                               final emp = _employees[index];
                               final isExempt = emp['is_exempt'] == 1;
                               final bool hasActiveLeave = emp['has_active_leave'] == 1;
-                              final String status = (emp['status'] ?? '').toString();
-                              final bool isSeconded = status.contains('نسب'); // تنسيب أو منسب
+                              final String status = (emp['status'] ?? '').toString().trim();
+                              final String dept = (emp['department'] ?? '').toString().trim();
+                              final bool isSeconded = status.contains('تنسيب') ||
+                                  status.contains('نسب') ||
+                                  dept.contains('تنسيب') ||
+                                  dept.contains('نسب'); // يشمل أي موظف في قسم أو حالة التنسيب
                               final bool isTerminated = status.contains('استقال') ||
                                   status.contains('متوف') ||
                                   status.contains('انهاء') ||
-                                  status.contains('منتهي'); // استقالة أو متوفى أو إنهاء خدمة
+                                  status.contains('منتهي') ||
+                                  dept.contains('استقال') ||
+                                  dept.contains('متوف'); // استقالة أو متوفى أو إنهاء خدمة
 
                               Color cardBgColor = Colors.white;
                               BorderSide cardBorder = BorderSide(color: Colors.grey.shade200);

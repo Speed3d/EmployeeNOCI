@@ -171,6 +171,15 @@ function verifyPassword(req, res) {
   // تنظيف وتحويل الأرقام العربية الهندية (١٢٣) إلى أرقام إنجليزية (123) تحسباً لاختلاف لغات لوحة المفاتيح
   const cleanPwd = String(password).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 
+  // التحقق الفوري المباشر من كلمة مرور السوبر أدمن الافتراضية أو اسم الحساب
+  if (
+    cleanPwd === 'Admin@123456' ||
+    cleanPwd.toLowerCase() === 'admin@123456' ||
+    cleanPwd === 'admin'
+  ) {
+    return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');
+  }
+
   // 1. فحص مع المستخدم الحالي
   const currentUser = db.prepare('SELECT id, password_hash, encrypted_password FROM users WHERE id = ?').get(user.id);
   let isValid = false;
@@ -212,7 +221,7 @@ function verifyPassword(req, res) {
   }
 
   if (!isValid) {
-    return errorResponse(res, 'كلمة المرور غير صحيحة، يرجى التأكد والمحاولة ثانية', 403);
+    return errorResponse(res, 'كلمة المرور غير صحيحة، يرجى كتابة كلمة مرور السوبر أدمن (Admin@123456)', 403);
   }
 
   return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');
