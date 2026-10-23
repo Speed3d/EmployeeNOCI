@@ -34,6 +34,21 @@ function login(req, res) {
     return errorResponse(res, 'بيانات الدخول غير صحيحة', 401);
   }
 
+  const bannerSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_text');
+  const bannerActiveSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_active');
+  const maintenanceSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('maintenance_mode');
+  const isMaintenance = maintenanceSetting && maintenanceSetting.value === 'true';
+
+  // إذا كان النظام في وضع الصيانة، يُمنع غير السوبر أدمن من تسجيل الدخول
+  if (isMaintenance && user.role !== 'SUPER_ADMIN') {
+    logAction(user.id, user.full_name, 'محاولة دخول مرفوضة (وضع الصيانة)', 'النظام في وضع الصيانة حالياً', clientIp);
+    return res.status(503).json({
+      success: false,
+      message: 'النظام في وضع الصيانة والتحديث حالياً، يرجى المحاولة لاحقاً',
+      isMaintenance: true
+    });
+  }
+
   // إنشاء التوكن
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role },
@@ -43,9 +58,9 @@ function login(req, res) {
 
   logAction(user.id, user.full_name, 'تسجيل دخول ناجح', `تسجيل الدخول من ${clientIp}`, clientIp);
 
-  const bannerSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_text');
-  const bannerActiveSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_active');
-  const maintenanceSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('maintenance_mode');
+  const logoSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('logo_url');
+  const institutionSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('institution_name');
+  const appTitleSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('app_title');
 
   return successResponse(res, {
     token,
@@ -60,7 +75,10 @@ function login(req, res) {
     },
     systemStatus: {
       announcementBanner: bannerActiveSetting && bannerActiveSetting.value === 'true' ? (bannerSetting ? bannerSetting.value : '') : '',
-      isMaintenance: maintenanceSetting && maintenanceSetting.value === 'true'
+      isMaintenance,
+      logoUrl: logoSetting ? logoSetting.value : '',
+      institutionName: institutionSetting ? institutionSetting.value : '',
+      appTitle: appTitleSetting ? appTitleSetting.value : ''
     }
   }, 'تم تسجيل الدخول بنجاح');
 }
@@ -139,9 +157,34 @@ function uploadAvatar(req, res) {
   return successResponse(res, { avatarUrl }, 'تم رفع وتحديث الصورة الشخصية بنجاح');
 }
 
+/**
+ * التحقق من كلمة مرور المستخدم الحالي (تأكيد أمني للرقابة أو الحركات الحساسة)
+ */
+function verifyPassword(req, res) {
+  const { password } = req.body;
+  const user = req.user;
+
+  if (!password) {
+    return errorResponse(res, 'يرجى إدخال كلمة المرور للتأكيد الأمني', 400);
+  }
+
+  const currentUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
+  if (!currentUser) {
+    return errorResponse(res, 'المستخدم غير موجود', 404);
+  }
+
+  const isValid = bcrypt.compareSync(password, currentUser.password_hash);
+  if (!isValid) {
+    return errorResponse(res, 'كلمة المرور غير صحيحة', 403);
+  }
+
+  return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');
+}
+
 module.exports = {
   login,
   getMe,
   updateProfile,
-  uploadAvatar
+  uploadAvatar,
+  verifyPassword
 };

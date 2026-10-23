@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/api_client.dart';
 import '../core/auth_provider.dart';
@@ -30,6 +31,33 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _unreadChatCount = 0;
+  Timer? _unreadTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUnreadChat();
+    _unreadTimer = Timer.periodic(const Duration(seconds: 4), (_) => _fetchUnreadChat());
+  }
+
+  @override
+  void dispose() {
+    _unreadTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchUnreadChat() async {
+    try {
+      final res = await ApiClient.instance.get('/chat/unread-count');
+      if (mounted && res != null && res['unreadCount'] != null) {
+        final count = (res['unreadCount'] as num).toInt();
+        if (count != _unreadChatCount) {
+          setState(() => _unreadChatCount = count);
+        }
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +73,7 @@ class _MainLayoutState extends State<MainLayout> {
       _NavItem(Icons.calendar_month_rounded, 'جداول الدوام والراحة', 3),
       _NavItem(Icons.event_note_rounded, 'الإجازات والعطلات', 4),
       _NavItem(Icons.assessment_rounded, 'التقارير الشهرية', 5),
-      _NavItem(Icons.chat_bubble_outline_rounded, 'المحادثة الفورية', 6),
+      _NavItem(Icons.chat_bubble_outline_rounded, 'المحادثة الفورية', 6, badgeCount: _unreadChatCount),
       if (auth.isSuperAdmin) ...[
         _NavItem(Icons.history_rounded, 'سجل الحركات (Logs)', 7),
         _NavItem(Icons.settings_rounded, 'الإعدادات والصيانة', 8),
@@ -285,34 +313,49 @@ class _MainLayoutState extends State<MainLayout> {
         children: [
           // ترويسة القائمة مع الشعار
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             alignment: Alignment.centerRight,
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: AppColors.navy,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.security_rounded, color: AppColors.goldBright, size: 22),
+                  child: AuthProvider.instance.fullLogoUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            AuthProvider.instance.fullLogoUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.security_rounded, color: AppColors.goldBright, size: 22),
+                          ),
+                        )
+                      : const Icon(Icons.security_rounded, color: AppColors.goldBright, size: 22),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'NOCI مقر',
-                        style: TextStyle(
-                          fontSize: 16,
+                        AuthProvider.instance.institutionName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: AppColors.navy,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        'حضور وبصمة الموظفين',
-                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                        AuthProvider.instance.appTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -349,13 +392,35 @@ class _MainLayoutState extends State<MainLayout> {
                         size: 20,
                         color: isSelected ? AppColors.navy : Colors.grey,
                       ),
-                      title: Text(
-                        item.label,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? AppColors.navy : theme.textTheme.bodyMedium?.color,
-                        ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                color: isSelected ? AppColors.navy : theme.textTheme.bodyMedium?.color,
+                              ),
+                            ),
+                          ),
+                          if (item.badgeCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.danger,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${item.badgeCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       onTap: () {
                         if (!Responsive.isDesktop(context)) {
@@ -388,5 +453,6 @@ class _NavItem {
   final IconData icon;
   final String label;
   final int index;
-  _NavItem(this.icon, this.label, this.index);
+  final int badgeCount;
+  _NavItem(this.icon, this.label, this.index, {this.badgeCount = 0});
 }

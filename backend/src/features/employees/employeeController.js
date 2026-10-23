@@ -9,32 +9,45 @@ const { ROLES } = require('../../shared/constants');
 
 function listEmployees(req, res) {
   const { search, department, status, isExempt } = req.query;
+  const today = new Date().toISOString().split('T')[0];
 
-  let query = 'SELECT * FROM employees WHERE 1=1';
-  const params = [];
+  let query = `
+    SELECT e.*,
+      (SELECT 1 FROM leaves l 
+       WHERE l.employee_id = e.id 
+         AND ? BETWEEN l.start_date AND l.end_date 
+       LIMIT 1) as has_active_leave,
+      (SELECT l.leave_type FROM leaves l 
+       WHERE l.employee_id = e.id 
+         AND ? BETWEEN l.start_date AND l.end_date 
+       LIMIT 1) as active_leave_type
+    FROM employees e
+    WHERE 1=1
+  `;
+  const params = [today, today];
 
   if (search) {
-    query += ' AND (name LIKE ? OR emp_code LIKE ? OR phone LIKE ?)';
+    query += ' AND (e.name LIKE ? OR e.emp_code LIKE ? OR e.phone LIKE ?)';
     const term = `%${search.trim()}%`;
     params.push(term, term, term);
   }
 
   if (department) {
-    query += ' AND department = ?';
+    query += ' AND e.department = ?';
     params.push(department);
   }
 
   if (status) {
-    query += ' AND status = ?';
+    query += ' AND e.status = ?';
     params.push(status);
   }
 
   if (isExempt !== undefined) {
-    query += ' AND is_exempt = ?';
+    query += ' AND e.is_exempt = ?';
     params.push(isExempt === 'true' || isExempt === '1' ? 1 : 0);
   }
 
-  query += ' ORDER BY CAST(emp_code AS INTEGER) ASC, id ASC';
+  query += ' ORDER BY CAST(e.emp_code AS INTEGER) ASC, e.id ASC';
 
   const employees = db.prepare(query).all(...params);
   return successResponse(res, employees);

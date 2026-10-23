@@ -239,6 +239,202 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     }
   }
 
+  // عرض الملف الشخصي الكامل للموظف (سجل الإجازات والأذونات، التنقلات، والحضور)
+  Future<void> _showEmployeeProfileDialog(Map<String, dynamic> emp) async {
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return FutureBuilder<dynamic>(
+            future: ApiClient.instance.get('/employees/${emp['id']}'),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const AlertDialog(
+                  content: SizedBox(
+                    height: 140,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError || snapshot.data == null) {
+                return AlertDialog(
+                  title: const Text('خطأ'),
+                  content: Text('فشل تحميل تفاصيل الموظف: ${snapshot.error}'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('إغلاق'))],
+                );
+              }
+
+              final data = snapshot.data;
+              final fullEmp = data['employee'] ?? emp;
+              final List<dynamic> leaves = data['leaves'] ?? [];
+              final List<dynamic> transfers = data['transfers'] ?? [];
+              final List<dynamic> attendance = data['recentAttendance'] ?? [];
+
+              final bool hasActiveLeave = emp['has_active_leave'] == 1;
+              final String status = (fullEmp['status'] ?? '').toString();
+
+              return DefaultTabController(
+                length: 3,
+                child: AlertDialog(
+                  titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                  title: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppColors.navy,
+                        child: Text(
+                          '${fullEmp['emp_code']}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              fullEmp['name'] ?? '',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              '${fullEmp['department']} • الحالة: $status',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: SizedBox(
+                    width: 650,
+                    height: 480,
+                    child: Column(
+                      children: [
+                        if (hasActiveLeave)
+                          Container(
+                            margin: const EdgeInsets.only(top: 8, bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE3F2FD),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF90CAF9)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.beach_access_rounded, color: AppColors.info, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'الموظف حالياً في إجازة رسمية: (${emp['active_leave_type'] ?? 'إجازة معتمدة'})',
+                                    style: const TextStyle(color: AppColors.info, fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const TabBar(
+                          labelColor: AppColors.navy,
+                          indicatorColor: AppColors.gold,
+                          tabs: [
+                            Tab(icon: Icon(Icons.beach_access_rounded, size: 18), text: 'سجل الإجازات'),
+                            Tab(icon: Icon(Icons.swap_horiz_rounded, size: 18), text: 'سجل التنقلات'),
+                            Tab(icon: Icon(Icons.history_rounded, size: 18), text: 'آخر حركات الحضور'),
+                          ],
+                        ),
+                        Expanded(
+                          child: TabBarView(
+                            children: [
+                              // 1. سجل الإجازات والأذونات
+                              leaves.isEmpty
+                                  ? const Center(child: Text('لا توجد إجازات مسجلة لهذا الموظف', style: TextStyle(color: Colors.grey)))
+                                  : ListView.separated(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      itemCount: leaves.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      itemBuilder: (ctx, i) {
+                                        final l = leaves[i];
+                                        return ListTile(
+                                          dense: true,
+                                          leading: const Icon(Icons.event_available_rounded, color: AppColors.info, size: 20),
+                                          title: Text(
+                                            '${l['leave_type']} (من ${l['start_date']} إلى ${l['end_date']})',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                          subtitle: Text(
+                                            (l['reason'] != null && l['reason'].toString().isNotEmpty ? 'السبب: ${l['reason']}' : 'بدون ملاحظات') +
+                                                (l['created_at'] != null ? ' • تاريخ التسجيل: ${l['created_at'].toString().split(' ')[0]}' : ''),
+                                            style: const TextStyle(fontSize: 11),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                              // 2. سجل التنقلات الإدارية
+                              transfers.isEmpty
+                                  ? const Center(child: Text('لا توجد تنقلات مسجلة لهذا الموظف', style: TextStyle(color: Colors.grey)))
+                                  : ListView.separated(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      itemCount: transfers.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      itemBuilder: (ctx, i) {
+                                        final t = transfers[i];
+                                        return ListTile(
+                                          dense: true,
+                                          leading: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy, size: 20),
+                                          title: Text(
+                                            'من [${t['previous_department']}] ⬅️ إلى [${t['new_department']}]',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                          subtitle: Text(
+                                            (t['reason'] != null ? 'الأمر/السبب: ${t['reason']}' : '') +
+                                                (t['created_at'] != null ? ' • بتاريخ: ${t['created_at'].toString().split(' ')[0]}' : ''),
+                                            style: const TextStyle(fontSize: 11),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                              // 3. آخر حركات الحضور
+                              attendance.isEmpty
+                                  ? const Center(child: Text('لا توجد حركات حضور مسجلة', style: TextStyle(color: Colors.grey)))
+                                  : ListView.separated(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      itemCount: attendance.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      itemBuilder: (ctx, i) {
+                                        final a = attendance[i];
+                                        return ListTile(
+                                          dense: true,
+                                          leading: const Icon(Icons.access_time_filled_rounded, color: AppColors.onTime, size: 18),
+                                          title: Text(
+                                            'التاريخ: ${a['date']} • الحالة: ${a['status']}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                          ),
+                                          subtitle: Text(
+                                            'دخول: ${a['check_in_time'] ?? '--:--'} • خروج: ${a['check_out_time'] ?? '--:--'} • تأخير: ${a['delay_minutes'] ?? 0} دقيقة',
+                                            style: const TextStyle(fontSize: 11),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('إغلاق')),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = AuthProvider.instance;
@@ -343,21 +539,80 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                             itemBuilder: (context, index) {
                               final emp = _employees[index];
                               final isExempt = emp['is_exempt'] == 1;
+                              final bool hasActiveLeave = emp['has_active_leave'] == 1;
+                              final String status = (emp['status'] ?? '').toString();
+                              final bool isDeceased = status.contains('متوف'); // متوفى أو متوفي
+                              final bool isSeconded = status.contains('نسب'); // تنسيب أو منسب
+
+                              Color cardBgColor = Colors.white;
+                              BorderSide cardBorder = BorderSide(color: Colors.grey.shade200);
+
+                              if (hasActiveLeave) {
+                                cardBgColor = const Color(0xFFE8F1FC); // أزرق فاتح راقٍ (إجازة رسمية)
+                                cardBorder = const BorderSide(color: Color(0xFF90CAF9), width: 1.5);
+                              } else if (isDeceased) {
+                                cardBgColor = const Color(0xFFFFEBEE); // أحمر فاتح (متوفى)
+                                cardBorder = const BorderSide(color: Color(0xFFEF9A9A), width: 1.5);
+                              } else if (isSeconded) {
+                                cardBgColor = const Color(0xFFFFF3E0); // برتقالي فاتح (تنسيب)
+                                cardBorder = const BorderSide(color: Color(0xFFFFCC80), width: 1.5);
+                              }
 
                               return Card(
-                                elevation: 1,
+                                color: cardBgColor,
+                                elevation: hasActiveLeave || isDeceased || isSeconded ? 2 : 1,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: cardBorder,
+                                ),
                                 child: ListTile(
+                                  onTap: () => _showEmployeeProfileDialog(emp),
                                   leading: CircleAvatar(
-                                    backgroundColor: AppColors.navy.withOpacity(0.1),
+                                    backgroundColor: hasActiveLeave
+                                        ? AppColors.info
+                                        : (isDeceased
+                                            ? AppColors.danger
+                                            : (isSeconded ? Colors.orange.shade800 : AppColors.navy)),
                                     child: Text(
                                       '${emp['emp_code']}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.navy, fontSize: 13),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
                                     ),
                                   ),
-                                  title: Row(
+                                  title: Wrap(
+                                    spacing: 6,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
                                     children: [
                                       Text(emp['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                      const SizedBox(width: 8),
+                                      if (hasActiveLeave)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.info,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            '🏖️ إجازة: ${emp['active_leave_type'] ?? ''}',
+                                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      if (isDeceased)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.danger,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text('🕊️ متوفى', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                        ),
+                                      if (isSeconded)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange.shade800,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text('📋 تنسيب', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                        ),
                                       if (isExempt)
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -369,34 +624,46 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                         ),
                                     ],
                                   ),
-                                  subtitle: Text(
-                                    '${emp['department']} • الحالة: ${emp['status']}' +
-                                        (emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : ''),
-                                    style: const TextStyle(fontSize: 12),
+                                  subtitle: Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      '${emp['department']} • الحالة: ${emp['status']}' +
+                                          (emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : '') +
+                                          ' (انقر لعرض الملف والإجازات)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDeceased ? Colors.red.shade900 : (isSeconded ? Colors.brown.shade800 : Colors.grey.shade700),
+                                      ),
+                                    ),
                                   ),
-                                  trailing: auth.isSuperAdmin
-                                      ? Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // زر النقل بين الأقسام
-                                            IconButton(
-                                              icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
-                                              tooltip: 'نقل إلى قسم آخر',
-                                              onPressed: () => _showTransferDialog(emp),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.edit_rounded, color: Colors.blueGrey),
-                                              tooltip: 'تعديل البيانات',
-                                              onPressed: () => _showEmployeeDialog(emp),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                                              tooltip: 'حذف',
-                                              onPressed: () => _deleteEmployee(emp),
-                                            ),
-                                          ],
-                                        )
-                                      : null,
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.assignment_ind_rounded, color: AppColors.navy),
+                                        tooltip: 'عرض الملف وسجل الإجازات والتنقلات',
+                                        onPressed: () => _showEmployeeProfileDialog(emp),
+                                      ),
+                                      if (auth.isSuperAdmin) ...[
+                                        // زر النقل بين الأقسام
+                                        IconButton(
+                                          icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
+                                          tooltip: 'نقل إلى قسم آخر',
+                                          onPressed: () => _showTransferDialog(emp),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_rounded, color: Colors.blueGrey),
+                                          tooltip: 'تعديل البيانات',
+                                          onPressed: () => _showEmployeeDialog(emp),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                          tooltip: 'حذف',
+                                          onPressed: () => _deleteEmployee(emp),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
                               );
                             },

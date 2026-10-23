@@ -55,7 +55,10 @@ function uploadLogo(req, res) {
   }
 
   const logoUrl = `/uploads/branding/${file.filename}`;
-  db.prepare('UPDATE system_settings SET value = ? WHERE key = ?').run(logoUrl, 'logo_url');
+  const updateRes = db.prepare('UPDATE system_settings SET value = ? WHERE key = ?').run(logoUrl, 'logo_url');
+  if (updateRes.changes === 0) {
+    db.prepare('INSERT INTO system_settings (key, value) VALUES (?, ?)').run('logo_url', logoUrl);
+  }
 
   logAction(user.id, user.full_name, 'تحديث شعار النظام', `رفع شعار جديد: ${logoUrl}`);
 

@@ -5,6 +5,7 @@ import 'core/api_client.dart';
 import 'core/auth_provider.dart';
 import 'shared/main_layout.dart';
 import 'features/auth/login_screen.dart';
+import 'features/auth/maintenance_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/attendance/attendance_screen.dart';
 import 'features/employees/employees_screen.dart';
@@ -51,7 +52,9 @@ class NociAttendanceApp extends StatelessWidget {
           home: auth.isLoading
               ? const Scaffold(body: Center(child: CircularProgressIndicator()))
               : auth.isLoggedIn
-                  ? const AppShell()
+                  ? (auth.isMaintenance && !auth.isSuperAdmin)
+                      ? const MaintenanceScreen()
+                      : const AppShell()
                   : const LoginScreen(),
         );
       },

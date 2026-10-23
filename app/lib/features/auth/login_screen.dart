@@ -76,10 +76,35 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // تنبيه وضع الصيانة إن وجد
+                    if (AuthProvider.instance.isMaintenance) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.construction_rounded, color: AppColors.danger, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'النظام في وضع الصيانة حالياً (الدخول متاح للسوبر أدمن فقط)',
+                                style: TextStyle(color: AppColors.danger, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     // أيقونة وشعار النظام
                     Container(
-                      width: 72,
-                      height: 72,
+                      width: 76,
+                      height: 76,
                       decoration: BoxDecoration(
                         color: AppColors.navy,
                         shape: BoxShape.circle,
@@ -91,17 +116,29 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.fingerprint_rounded,
-                        color: AppColors.goldBright,
-                        size: 42,
-                      ),
+                      child: AuthProvider.instance.fullLogoUrl != null
+                          ? ClipOval(
+                              child: Image.network(
+                                AuthProvider.instance.fullLogoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.fingerprint_rounded,
+                                  color: AppColors.goldBright,
+                                  size: 42,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.fingerprint_rounded,
+                              color: AppColors.goldBright,
+                              size: 42,
+                            ),
                     ),
                     const SizedBox(height: 18),
 
                     // اسم المؤسسة
                     Text(
-                      AppConstants.institutionName,
+                      AuthProvider.instance.institutionName,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -112,10 +149,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 6),
 
                     // عنوان البرنامج
-                    const Text(
-                      AppConstants.appTitle,
+                    Text(
+                      AuthProvider.instance.appTitle,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: AppColors.navy,

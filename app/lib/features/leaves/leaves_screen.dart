@@ -21,6 +21,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
   List<dynamic> _departments = [];
 
   String? _selectedDept;
+  String _leaveFilterMode = 'ACTIVE'; // ACTIVE (سارية وقادمة), EXPIRED (منتهية), ALL (الكل)
 
   @override
   void initState() {
@@ -341,44 +342,138 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                     controller: _tabController,
                     children: [
                       // تبويب 1: الإجازات
-                      _leaves.isEmpty
-                          ? const Center(child: Text('لا توجد إجازات مسجلة'))
-                          : ListView.separated(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _leaves.length,
-                              separatorBuilder: (context, index) => const SizedBox(height: 8),
-                              itemBuilder: (context, index) {
-                                final l = _leaves[index];
-                                return Card(
-                                  child: ListTile(
-                                    leading: const CircleAvatar(
-                                      backgroundColor: AppColors.info,
-                                      child: Icon(Icons.beach_access_rounded, color: Colors.white, size: 20),
+                      Builder(
+                        builder: (context) {
+                          final todayStr = DateFormatter.toYmd(DateTime.now());
+                          final activeLeaves = _leaves.where((l) => (l['end_date'] ?? '').toString().compareTo(todayStr) >= 0).toList();
+                          final expiredLeaves = _leaves.where((l) => (l['end_date'] ?? '').toString().compareTo(todayStr) < 0).toList();
+
+                          final displayedLeaves = _leaveFilterMode == 'ACTIVE'
+                              ? activeLeaves
+                              : (_leaveFilterMode == 'EXPIRED' ? expiredLeaves : _leaves);
+
+                          return Column(
+                            children: [
+                              // شريط فلترة الإجازات السارية مقابل المنتهية
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                color: Theme.of(context).cardTheme.color ?? Colors.white,
+                                child: Row(
+                                  children: [
+                                    ChoiceChip(
+                                      label: Text('الإجازات السارية (${activeLeaves.length})'),
+                                      selected: _leaveFilterMode == 'ACTIVE',
+                                      selectedColor: AppColors.onTime.withOpacity(0.15),
+                                      labelStyle: TextStyle(
+                                        color: _leaveFilterMode == 'ACTIVE' ? AppColors.onTime : Colors.black87,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                      onSelected: (_) => setState(() => _leaveFilterMode = 'ACTIVE'),
                                     ),
-                                    title: Text(
-                                      '[${l['emp_code']}] ${l['employee_name'] ?? ''}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    const SizedBox(width: 8),
+                                    ChoiceChip(
+                                      label: Text('أرشيف الإجازات المنتهية (${expiredLeaves.length})'),
+                                      selected: _leaveFilterMode == 'EXPIRED',
+                                      selectedColor: Colors.grey.shade300,
+                                      labelStyle: TextStyle(
+                                        color: _leaveFilterMode == 'EXPIRED' ? AppColors.navy : Colors.black87,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                      onSelected: (_) => setState(() => _leaveFilterMode = 'EXPIRED'),
                                     ),
-                                    subtitle: Text(
-                                      'نوع الإجازة: ${l['leave_type']} • من ${l['start_date']} إلى ${l['end_date']}' +
-                                          (l['reason'] != null && l['reason'].toString().isNotEmpty ? ' (${l['reason']})' : ''),
-                                      style: const TextStyle(fontSize: 12),
+                                    const SizedBox(width: 8),
+                                    ChoiceChip(
+                                      label: Text('الكل (${_leaves.length})'),
+                                      selected: _leaveFilterMode == 'ALL',
+                                      labelStyle: const TextStyle(fontSize: 12),
+                                      onSelected: (_) => setState(() => _leaveFilterMode = 'ALL'),
                                     ),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                                      onPressed: () async {
-                                        try {
-                                          await ApiClient.instance.delete('/leaves/${l['id']}');
-                                          _loadData();
-                                        } catch (e) {
-                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                                  ],
+                                ),
+                              ),
+                              const Divider(height: 1),
+
+                              // قائمة الإجازات المعروضة
+                              Expanded(
+                                child: displayedLeaves.isEmpty
+                                    ? Center(
+                                        child: Text(
+                                          _leaveFilterMode == 'ACTIVE'
+                                              ? 'لا توجد إجازات سارية حالياً'
+                                              : (_leaveFilterMode == 'EXPIRED' ? 'لا توجد إجازات منتهية في الأرشيف' : 'لا توجد إجازات مسجلة'),
+                                          style: const TextStyle(color: Colors.grey),
+                                        ),
+                                      )
+                                    : ListView.separated(
+                                        padding: const EdgeInsets.all(16),
+                                        itemCount: displayedLeaves.length,
+                                        separatorBuilder: (context, index) => const SizedBox(height: 8),
+                                        itemBuilder: (context, index) {
+                                          final l = displayedLeaves[index];
+                                          final isExpired = (l['end_date'] ?? '').toString().compareTo(todayStr) < 0;
+
+                                          return Card(
+                                            child: ListTile(
+                                              leading: CircleAvatar(
+                                                backgroundColor: isExpired ? Colors.grey.shade300 : AppColors.info,
+                                                child: Icon(
+                                                  Icons.beach_access_rounded,
+                                                  color: isExpired ? Colors.grey.shade700 : Colors.white,
+                                                  size: 20,
+                                                ),
+                                              ),
+                                              title: Row(
+                                                children: [
+                                                  Text(
+                                                    '[${l['emp_code']}] ${l['employee_name'] ?? ''}',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: isExpired ? Colors.grey.shade200 : AppColors.onTime.withOpacity(0.12),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      isExpired ? 'منتهية' : 'سارية',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isExpired ? Colors.grey.shade600 : AppColors.onTime,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              subtitle: Text(
+                                                'نوع الإجازة: ${l['leave_type']} • من ${l['start_date']} إلى ${l['end_date']}' +
+                                                    (l['reason'] != null && l['reason'].toString().isNotEmpty ? ' (${l['reason']})' : ''),
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                              trailing: IconButton(
+                                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                                tooltip: 'حذف الإجازة',
+                                                onPressed: () async {
+                                                  try {
+                                                    await ApiClient.instance.delete('/leaves/${l['id']}');
+                                                    _loadData();
+                                                  } catch (e) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
 
                       // تبويب 2: العطلات الرسمية
                       _holidays.isEmpty

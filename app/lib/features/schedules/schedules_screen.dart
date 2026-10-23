@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../core/auth_provider.dart';
 import '../../core/theme.dart';
 import '../../tools/date_formatter.dart';
 
@@ -857,16 +858,18 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.navy,
-                        side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                    if (AuthProvider.instance.isSuperAdmin) ...[
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.navy,
+                          side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                        ),
+                        icon: const Icon(Icons.dashboard_customize_rounded, size: 16),
+                        label: const Text('إدارة قوالب الدوام'),
+                        onPressed: _showTemplatesManagerDialog,
                       ),
-                      icon: const Icon(Icons.dashboard_customize_rounded, size: 16),
-                      label: const Text('إدارة قوالب الدوام'),
-                      onPressed: _showTemplatesManagerDialog,
-                    ),
-                    const SizedBox(width: 8),
+                      const SizedBox(width: 8),
+                    ],
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.navy,

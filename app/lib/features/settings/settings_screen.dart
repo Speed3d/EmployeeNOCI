@@ -113,34 +113,87 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
       await ApiClient.instance.put('/settings', body);
       AuthProvider.instance.updateBanner(_bannerActive ? _bannerTextController.text.trim() : null);
+      AuthProvider.instance.setMaintenanceMode(_maintenanceMode);
+      AuthProvider.instance.updateBranding(
+        logoUrl: _currentLogoUrl,
+        institutionName: _institutionNameController.text.trim(),
+        appTitle: _appTitleController.text.trim(),
+      );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم حفظ الإعدادات بنجاح!')),
       );
       _loadSettingsAndUsers();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
+  // حفظ وضع الصيانة وشريط التعاميم حصرياً
+  Future<void> _saveMaintenanceSettings() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
+    try {
+      final body = {
+        'maintenance_mode': _maintenanceMode.toString(),
+        'announcement_banner_active': _bannerActive.toString(),
+        'announcement_banner_text': _bannerTextController.text.trim(),
+      };
+      await ApiClient.instance.put('/settings', body);
+      AuthProvider.instance.setMaintenanceMode(_maintenanceMode);
+      AuthProvider.instance.updateBanner(_bannerActive ? _bannerTextController.text.trim() : null);
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text(_maintenanceMode
+              ? 'تم تفعيل وضع الصيانة بنجاح (محصور بالسوبر أدمن فقط)!'
+              : 'تم تعطيل وضع الصيانة وحفظ الإعدادات بنجاح!'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل حفظ إعدادات الصيانة: $e')));
+    }
+  }
+
   // رفع شعار المؤسسة
   Future<void> _uploadLogo() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final files = await FilePicker.pickFiles(type: FileType.image);
       if (files.isNotEmpty) {
         final file = files.first;
         final bytes = await file.xFile.readAsBytes();
         setState(() => _isLoading = true);
-        await ApiClient.instance.uploadFile('/settings/logo', bytes, file.name);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم رفع وتحديث الشعار بنجاح!')),
+        final res = await ApiClient.instance.uploadFile('/settings/logo', bytes, file.name);
+
+        if (res != null && res['logoUrl'] != null) {
+          _currentLogoUrl = res['logoUrl'];
+        }
+
+        await AuthProvider.instance.updateBranding(
+          logoUrl: _currentLogoUrl,
+          institutionName: _institutionNameController.text.trim(),
+          appTitle: _appTitleController.text.trim(),
+        );
+
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم رفع وتحديث الشعار المعتمد بنجاح!')),
         );
         _loadSettingsAndUsers();
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل رفع الشعار: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('فشل رفع الشعار: $e')));
     }
   }
 
@@ -566,8 +619,25 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                         onPressed: _uploadLogo,
                                       ),
                                       const SizedBox(width: 16),
-                                      if (_currentLogoUrl.isNotEmpty)
-                                        Text('الشعار مسجل: $_currentLogoUrl', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                      if (_currentLogoUrl.isNotEmpty) ...[
+                                        Container(
+                                          width: 50,
+                                          height: 50,
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.grey.shade300),
+                                            color: Colors.white,
+                                          ),
+                                          child: Image.network(
+                                            '${ApiClient.instance.baseUrl.replaceAll('/api', '')}$_currentLogoUrl',
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded, size: 24, color: Colors.grey),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text('معاينة الشعار المعتمد', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                                      ],
                                     ],
                                   ),
                                 ],
@@ -712,11 +782,25 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                     value: _bannerActive,
                                     onChanged: (val) => setState(() => _bannerActive = val),
                                   ),
-                                  if (_bannerActive)
+                                  if (_bannerActive) ...[
+                                    const SizedBox(height: 10),
                                     TextField(
                                       controller: _bannerTextController,
                                       decoration: const InputDecoration(labelText: 'نص التعميم العلوي', border: OutlineInputBorder()),
                                     ),
+                                  ],
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.navy,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    icon: const Icon(Icons.save_rounded, size: 18),
+                                    label: const Text('حفظ إعدادات وضع الصيانة والتعاميم', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    onPressed: _saveMaintenanceSettings,
+                                  ),
                                 ],
                               ),
                             ),

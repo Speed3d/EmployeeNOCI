@@ -29,5 +29,6 @@ router.post('/login', authController.login);
 router.get('/me', authenticateToken, authController.getMe);
 router.put('/profile', authenticateToken, authController.updateProfile);
 router.post('/avatar', authenticateToken, uploadAvatar.single('file'), authController.uploadAvatar);
+router.post('/verify-password', authenticateToken, authController.verifyPassword);
 
 module.exports = router;

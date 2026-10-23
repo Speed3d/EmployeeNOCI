@@ -4,8 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'constants.dart';
 
-/// Hint: مزود حالة المصادقة وإدارة الجلسات والصلاحيات (Auth Provider)
-/// يدعم الرتبتين المعتمدتين: السوبر أدمن ومدخل البيانات مع الصلاحيات الخاصة
+/// Hint: مزود حالة المصادقة وإدارة الجلسات والصلاحيات وهوية المؤسسة (Auth Provider)
+/// يدعم الرتبتين المعتمدتين: السوبر أدمن ومدخل البيانات مع الصلاحيات الخاصة ووضع الصيانة
 class AuthProvider extends ChangeNotifier {
   static final AuthProvider instance = AuthProvider._();
   AuthProvider._();
@@ -15,11 +15,26 @@ class AuthProvider extends ChangeNotifier {
   String? _announcementBanner;
   bool _isMaintenance = false;
 
+  String? _logoUrl;
+  String _institutionName = AppConstants.institutionName;
+  String _appTitle = AppConstants.appTitle;
+
   Map<String, dynamic>? get user => _user;
   bool get isLoading => _isLoading;
   bool get isLoggedIn => _user != null;
   String? get announcementBanner => _announcementBanner;
   bool get isMaintenance => _isMaintenance;
+
+  String? get logoUrl => _logoUrl;
+  String get institutionName => _institutionName;
+  String get appTitle => _appTitle;
+
+  String? get fullLogoUrl {
+    if (_logoUrl == null || _logoUrl!.isEmpty) return null;
+    if (_logoUrl!.startsWith('http://') || _logoUrl!.startsWith('https://')) return _logoUrl;
+    final base = ApiClient.instance.baseUrl.replaceAll('/api', '');
+    return '$base$_logoUrl';
+  }
 
   // الرتب الحصرية
   bool get isSuperAdmin => _user != null && _user!['role'] == 'SUPER_ADMIN';
@@ -44,8 +59,41 @@ class AuthProvider extends ChangeNotifier {
       }
     }
 
+    _logoUrl = prefs.getString('branding_logo_url');
+    _institutionName = prefs.getString('branding_institution_name') ?? AppConstants.institutionName;
+    _appTitle = prefs.getString('branding_app_title') ?? AppConstants.appTitle;
+
     _isLoading = false;
     notifyListeners();
+
+    // فحص صحة النظام وهوية المؤسسة في الخلفية
+    checkSystemStatus();
+  }
+
+  Future<void> checkSystemStatus() async {
+    try {
+      final res = await ApiClient.instance.get('/system/status');
+      if (res != null) {
+        _isMaintenance = res['isMaintenance'] == true;
+        _announcementBanner = res['announcementBanner'];
+        if (res['logoUrl'] != null && res['logoUrl'].toString().isNotEmpty) {
+          _logoUrl = res['logoUrl'];
+        }
+        if (res['institutionName'] != null && res['institutionName'].toString().isNotEmpty) {
+          _institutionName = res['institutionName'];
+        }
+        if (res['appTitle'] != null && res['appTitle'].toString().isNotEmpty) {
+          _appTitle = res['appTitle'];
+        }
+
+        final prefs = await SharedPreferences.getInstance();
+        if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
+        await prefs.setString('branding_institution_name', _institutionName);
+        await prefs.setString('branding_app_title', _appTitle);
+
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   Future<void> login(String username, String password) async {
@@ -61,12 +109,24 @@ class AuthProvider extends ChangeNotifier {
     if (systemStatus != null) {
       _announcementBanner = systemStatus['announcementBanner'];
       _isMaintenance = systemStatus['isMaintenance'] ?? false;
+      if (systemStatus['logoUrl'] != null && systemStatus['logoUrl'].toString().isNotEmpty) {
+        _logoUrl = systemStatus['logoUrl'];
+      }
+      if (systemStatus['institutionName'] != null && systemStatus['institutionName'].toString().isNotEmpty) {
+        _institutionName = systemStatus['institutionName'];
+      }
+      if (systemStatus['appTitle'] != null && systemStatus['appTitle'].toString().isNotEmpty) {
+        _appTitle = systemStatus['appTitle'];
+      }
     }
 
     await ApiClient.instance.setToken(token);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(AppConstants.userKey, jsonEncode(_user));
+    if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
+    await prefs.setString('branding_institution_name', _institutionName);
+    await prefs.setString('branding_app_title', _appTitle);
 
     notifyListeners();
   }
@@ -87,6 +147,24 @@ class AuthProvider extends ChangeNotifier {
     };
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(AppConstants.userKey, jsonEncode(_user));
+    notifyListeners();
+  }
+
+  Future<void> updateBranding({String? logoUrl, String? institutionName, String? appTitle}) async {
+    if (logoUrl != null) _logoUrl = logoUrl;
+    if (institutionName != null && institutionName.isNotEmpty) _institutionName = institutionName;
+    if (appTitle != null && appTitle.isNotEmpty) _appTitle = appTitle;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
+    await prefs.setString('branding_institution_name', _institutionName);
+    await prefs.setString('branding_app_title', _appTitle);
+
+    notifyListeners();
+  }
+
+  void setMaintenanceMode(bool isMaint) {
+    _isMaintenance = isMaint;
     notifyListeners();
   }
 

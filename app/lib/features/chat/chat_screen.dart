@@ -26,6 +26,9 @@ class _ChatScreenState extends State<ChatScreen> {
   List<dynamic> _groups = [];
   List<dynamic> _surveillancePairs = [];
 
+  bool _isSurveillanceExpanded = false;
+  bool _isSurveillanceUnlocked = false;
+
   String _currentType = 'DIRECT'; // DIRECT, GROUP, SURVEILLANCE
   int? _currentTargetId;
   int? _surveillanceUser2Id;
@@ -170,6 +173,160 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       if (mounted) setState(() => _isSending = false);
     }
+  }
+
+  /// Hint: طي / توسيع سجل الرقابة الأمنية الشاملة مع التحقق الأمني بكلمة مرور السوبر أدمن
+  Future<void> _toggleSurveillance() async {
+    if (_isSurveillanceExpanded) {
+      setState(() {
+        _isSurveillanceExpanded = false;
+      });
+      return;
+    }
+
+    if (_isSurveillanceUnlocked) {
+      setState(() {
+        _isSurveillanceExpanded = true;
+      });
+      return;
+    }
+
+    // طلب كلمة مرور السوبر أدمن للتأكيد الأمني
+    final bool? verified = await _showPasswordPromptDialog();
+    if (verified == true && mounted) {
+      setState(() {
+        _isSurveillanceUnlocked = true;
+        _isSurveillanceExpanded = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.lock_open_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('تم التحقق بنجاح وفتح سجل الرقابة الشاملة'),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// حوار إدخال وتأكيد كلمة مرور السوبر أدمن
+  Future<bool?> _showPasswordPromptDialog() async {
+    final passwordCtrl = TextEditingController();
+    bool obscure = true;
+    bool isVerifying = false;
+    String? errorMsg;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.security_rounded, color: AppColors.danger),
+                SizedBox(width: 8),
+                Text('تأكيد أمني مطلوب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'عرض سجل الرقابة الشاملة على محادثات الموظفين مخصص للسوبر أدمن ويتطلب إدخال كلمة المرور للتأكيد:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: obscure,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'كلمة مرور السوبر أدمن',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                        onPressed: () => setDlgState(() => obscure = !obscure),
+                      ),
+                      errorText: errorMsg,
+                    ),
+                    onSubmitted: (_) async {
+                      if (isVerifying) return;
+                      final pwd = passwordCtrl.text.trim();
+                      if (pwd.isEmpty) {
+                        setDlgState(() => errorMsg = 'يرجى إدخال كلمة المرور');
+                        return;
+                      }
+                      setDlgState(() {
+                        isVerifying = true;
+                        errorMsg = null;
+                      });
+                      try {
+                        await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
+                        if (context.mounted) Navigator.pop(context, true);
+                      } catch (e) {
+                        setDlgState(() {
+                          isVerifying = false;
+                          errorMsg = 'كلمة المرور غير صحيحة، يرجى المحاولة ثانية';
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isVerifying ? null : () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.danger,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final pwd = passwordCtrl.text.trim();
+                        if (pwd.isEmpty) {
+                          setDlgState(() => errorMsg = 'يرجى إدخال كلمة المرور');
+                          return;
+                        }
+                        setDlgState(() {
+                          isVerifying = true;
+                          errorMsg = null;
+                        });
+                        try {
+                          await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
+                          if (context.mounted) Navigator.pop(context, true);
+                        } catch (e) {
+                          setDlgState(() {
+                            isVerifying = false;
+                            errorMsg = 'كلمة المرور غير صحيحة، يرجى المحاولة ثانية';
+                          });
+                        }
+                      },
+                icon: isVerifying
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.lock_open_rounded, size: 16),
+                label: const Text('تأكيد وفتح'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   // إنشاء محادثة جماعية جديدة (حصري للسوبر أدمن)
@@ -359,34 +516,84 @@ class _ChatScreenState extends State<ChatScreen> {
                                 onTap: () => _selectConversation('DIRECT', u['id'], u['name']),
                               ),
 
-                            // قسم الرقابة الأمنية الشاملة (للسوبر أدمن فقط)
-                            if (isSuper && _surveillancePairs.isNotEmpty) ...[
-                              const Divider(),
-                              const Padding(
-                                padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.security_rounded, size: 14, color: AppColors.danger),
-                                    SizedBox(width: 4),
-                                    Text('سجل الرقابة الشاملة (سوبر أدمن)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.danger)),
-                                  ],
-                                ),
-                              ),
-                              for (final p in _surveillancePairs)
-                                ListTile(
-                                  dense: true,
-                                  selected: _currentType == 'SURVEILLANCE' && _currentTargetId == p['user1']['id'] && _surveillanceUser2Id == p['user2']['id'],
-                                  selectedTileColor: AppColors.danger.withOpacity(0.08),
-                                  leading: const Icon(Icons.remove_red_eye_rounded, size: 18, color: AppColors.late),
-                                  title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  subtitle: Text(p['lastMessage'] ?? '', style: const TextStyle(fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  onTap: () => _selectConversation(
-                                    'SURVEILLANCE',
-                                    p['user1']['id'],
-                                    'رقابة: ${p['name']}',
-                                    user2Id: p['user2']['id'],
+                            // قسم الرقابة الأمنية الشاملة (للسوبر أدمن فقط - قابل للطي مع قفل أمني)
+                            if (isSuper) ...[
+                              const Divider(height: 24),
+                              InkWell(
+                                onTap: _toggleSurveillance,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: _isSurveillanceExpanded
+                                        ? AppColors.danger.withOpacity(0.08)
+                                        : Colors.grey.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: _isSurveillanceExpanded
+                                          ? AppColors.danger.withOpacity(0.2)
+                                          : Colors.grey.withOpacity(0.2),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _isSurveillanceUnlocked ? Icons.lock_open_rounded : Icons.lock_rounded,
+                                        size: 16,
+                                        color: AppColors.danger,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: Text(
+                                          'سجل الرقابة الشاملة (سوبر أدمن)',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: AppColors.danger,
+                                          ),
+                                        ),
+                                      ),
+                                      Icon(
+                                        _isSurveillanceExpanded
+                                            ? Icons.keyboard_arrow_up_rounded
+                                            : Icons.keyboard_arrow_down_rounded,
+                                        size: 20,
+                                        color: AppColors.danger,
+                                      ),
+                                    ],
                                   ),
                                 ),
+                              ),
+                              if (_isSurveillanceExpanded && _isSurveillanceUnlocked) ...[
+                                const SizedBox(height: 6),
+                                if (_surveillancePairs.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    child: Text(
+                                      'لا توجد محادثات ثنائية بين الموظفين حتى الآن',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                                    ),
+                                  )
+                                else
+                                  for (final p in _surveillancePairs)
+                                    ListTile(
+                                      dense: true,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      selected: _currentType == 'SURVEILLANCE' &&
+                                          _currentTargetId == p['user1']['id'] &&
+                                          _surveillanceUser2Id == p['user2']['id'],
+                                      selectedTileColor: AppColors.danger.withOpacity(0.08),
+                                      leading: const Icon(Icons.remove_red_eye_rounded, size: 18, color: AppColors.late),
+                                      title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      subtitle: Text(p['lastMessage'] ?? '', style: const TextStyle(fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      onTap: () => _selectConversation(
+                                        'SURVEILLANCE',
+                                        p['user1']['id'],
+                                        'رقابة: ${p['name']}',
+                                        user2Id: p['user2']['id'],
+                                      ),
+                                    ),
+                              ],
                             ],
                           ],
                         ),
