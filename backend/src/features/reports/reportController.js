@@ -132,6 +132,7 @@ function exportDailyExcel(req, res) {
         WHEN a.status = 'ON_LEAVE' THEN 'مجاز'
         WHEN a.status = 'OFF_DAY' THEN 'يوم راحة'
         WHEN a.status = 'HOLIDAY' THEN 'عطلة رسمية'
+        WHEN a.status = 'MISSED_PUNCH' THEN 'بصمة ناقصة'
         ELSE a.status
       END as 'الحالة',
       COALESCE(a.late_minutes, 0) as 'دقائق التأخير',
@@ -176,8 +177,72 @@ function exportDailyExcel(req, res) {
   return res.send(buffer);
 }
 
+/**
+ * Hint: تصدير التقرير التراكمي الشهري كملف Excel برابط مباشر (GET) ليعمل بسلاسة في المتصفح وسطح المكتب
+ */
+function exportMonthlyExcel(req, res) {
+  const { year, month, department } = req.query;
+  const user = req.user;
+
+  if (!year || !month) {
+    return errorResponse(res, 'يرجى تحديد السنة والشهر المطلوب تصديرهما', 400);
+  }
+
+  const paddedMonth = String(month).padStart(2, '0');
+  const monthPrefix = `${year}-${paddedMonth}-%`;
+
+  let query = `
+    SELECT 
+      e.emp_code as 'المعرف',
+      e.name as 'الاسم',
+      e.department as 'القسم',
+      COUNT(CASE WHEN a.status IN ('ON_TIME', 'LATE', 'VERY_LATE', 'EARLY_LEAVE') THEN 1 END) as 'أيام الحضور',
+      COUNT(CASE WHEN a.status = 'ON_TIME' THEN 1 END) as 'حضور نظامي',
+      COUNT(CASE WHEN a.status = 'LATE' THEN 1 END) as 'تأخير بسيط',
+      COUNT(CASE WHEN a.status = 'VERY_LATE' THEN 1 END) as 'تأخير كبير',
+      SUM(COALESCE(a.late_minutes, 0)) as 'مجموع التأخير (دقيقة)',
+      SUM(COALESCE(a.early_leave_minutes, 0)) as 'الانصراف المبكر (دقيقة)',
+      SUM(COALESCE(a.early_bonus_minutes, 0)) as 'مكافأة التبكير (دقيقة)',
+      SUM(COALESCE(a.overtime_minutes, 0)) as 'الدوام الإضافي (دقيقة)',
+      COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as 'أيام الغياب',
+      COUNT(CASE WHEN a.status = 'ON_LEAVE' THEN 1 END) as 'أيام الإجازات',
+      COUNT(CASE WHEN a.status = 'OFF_DAY' THEN 1 END) as 'أيام الراحة (Off)'
+    FROM employees e
+    LEFT JOIN attendance_records a ON a.employee_id = e.id 
+      AND a.date LIKE ? 
+      AND a.date IN (SELECT date FROM attendance_days WHERE status = 'COMMITTED')
+    WHERE e.status = 'نشط' 
+      AND e.is_exempt = 0 
+      AND e.department NOT IN (SELECT name FROM departments WHERE is_excluded = 1)
+  `;
+  const params = [monthPrefix];
+
+  if (department) {
+    query += ' AND e.department = ?';
+    params.push(department);
+  }
+
+  query += ' GROUP BY e.id ORDER BY CAST(e.emp_code AS INTEGER) ASC';
+
+  const rows = db.prepare(query).all(...params);
+
+  const wb = xlsx.utils.book_new();
+  const ws = xlsx.utils.json_to_sheet(rows);
+  ws['!views'] = [{ rightToLeft: true }];
+  xlsx.utils.book_append_sheet(wb, ws, `تقرير ${year}-${paddedMonth}`);
+
+  const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  logAction(user.id, user.full_name, 'تصدير التقرير الشهري إكسل', `تصدير التقرير الشهري ${year}-${paddedMonth} (${rows.length} موظف)`);
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="Monthly_Report_${year}_${paddedMonth}.xlsx"`);
+  return res.send(buffer);
+}
+
 module.exports = {
   getMonthlyTimesheet,
   exportGenericExcel,
-  exportDailyExcel
+  exportDailyExcel,
+  exportMonthlyExcel
 };

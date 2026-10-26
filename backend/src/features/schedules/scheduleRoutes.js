@@ -4,14 +4,14 @@
 const express = require('express');
 const router = express.Router();
 const scheduleController = require('./scheduleController');
-const { authenticateToken, requireRoles } = require('../../core/authMiddleware');
+const { authenticateToken, requireRoles, requireSuperAdmin } = require('../../core/authMiddleware');
 const { ROLES } = require('../../shared/constants');
 
-// قوالب الدوام
+// Hint: قوالب الدوام - استعراض للجميع، وإنشاء/تعديل/حذف حصرياً للمدير العام (SUPER_ADMIN)
 router.get('/templates', authenticateToken, scheduleController.listTemplates);
-router.post('/templates', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.DATA_ENTRY]), scheduleController.createTemplate);
-router.put('/templates/:id', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.DATA_ENTRY]), scheduleController.updateTemplate);
-router.delete('/templates/:id', authenticateToken, requireRoles([ROLES.SUPER_ADMIN, ROLES.DATA_ENTRY]), scheduleController.deleteTemplate);
+router.post('/templates', authenticateToken, requireSuperAdmin, scheduleController.createTemplate);
+router.put('/templates/:id', authenticateToken, requireSuperAdmin, scheduleController.updateTemplate);
+router.delete('/templates/:id', authenticateToken, requireSuperAdmin, scheduleController.deleteTemplate);
 
 // جداول دوام الموظفين والربط الأسبوعي
 router.get('/assignments', authenticateToken, scheduleController.getAssignments);

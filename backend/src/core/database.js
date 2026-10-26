@@ -353,8 +353,8 @@ function seedDefaultAdmin() {
     `).run('admin', hash, encrypted, 'مدير النظام (سوبر أدمن)');
     console.log('✔ تم إنشاء حساب السوبر أدمن الافتراضي: (admin / Admin@123456)');
   } else {
-    // تحديث كلمة المرور المشفرة إن لم تكن مسجلة
-    if (!adminUser.encrypted_password) {
+    // Hint: تحديث كلمة المرور المشفرة فقط إذا لم تكن مسجلة وكانت كلمة المرور الحالية مطابقة للافتراضية
+    if (!adminUser.encrypted_password && bcrypt.compareSync(defaultPlainPassword, adminUser.password_hash)) {
       const encrypted = encrypt(defaultPlainPassword);
       db.prepare(`
         UPDATE users 
@@ -367,5 +367,10 @@ function seedDefaultAdmin() {
 
 // تهيئة الجداول وترقيتها
 initDatabase();
+
+// Hint: تصدير دوال البذر الافتراضي لاستخدامها عند إعادة ضبط المصنع وتصفير النظام
+db.seedDefaultSettings = seedDefaultSettings;
+db.seedScheduleTemplates = seedScheduleTemplates;
+db.seedDefaultAdmin = seedDefaultAdmin;
 
 module.exports = db;

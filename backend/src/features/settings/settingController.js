@@ -9,6 +9,18 @@ const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
 const { encrypt, decrypt } = require('../../core/cryptoHelper');
 const { ROLES } = require('../../shared/constants');
+const { DB_PATH } = require('../../core/config');
+const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
+const seedEmployees = require('../../../scripts/seed_employees');
+
+// Hint: دالة مساعدة لتحويل الأرقام العربية/الفارسية إلى إنجليزية عند إدخال كلمة المرور
+function normalizeNumerals(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .trim();
+}
 
 // 1. إعدادات النظام العامة
 function getSettings(req, res) {
@@ -221,50 +233,150 @@ function deleteUser(req, res) {
 
 /**
  * 3. زر تصفير النظام وإعادة الضبط (حصري للسوبر أدمن مع التحقق من كلمة المرور)
+ * Hint: يدعم وضعين للتصفير يختارهما السوبر أدمن من النافذة:
+ * - factory_default: مسح كافة السجلات والحركات والمستخدمين الإضافيين والقوالب المخصصة وسجل التدقيق، وإعادة الإعدادات وقائمة الموظفين لنسخة الإكسل الأصلية.
+ * - wipe_all: مسح شامل بالكامل بما في ذلك الموظفون والأقسام ليصبح النظام فارغاً تماماً (0 موظف).
  */
-function resetDatabase(req, res) {
-  const { password } = req.body;
+async function resetDatabase(req, res) {
+  const { password, resetMode = 'factory_default' } = req.body;
   const user = req.user;
 
   if (!password) {
     return errorResponse(res, 'يرجى إدخال كلمة مرور السوبر أدمن للتأكيد قبل التصفير', 400);
   }
 
+  const normalizedPass = normalizeNumerals(password);
+
   // التحقق من صحة كلمة المرور الخاصة بالسوبر أدمن الحالي
-  const currentAdmin = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
-  const isValid = bcrypt.compareSync(password, currentAdmin.password_hash);
+  const currentAdmin = db.prepare('SELECT password_hash, encrypted_password FROM users WHERE id = ?').get(user.id);
+  if (!currentAdmin) {
+    return errorResponse(res, 'حساب السوبر أدمن غير موجود', 404);
+  }
+
+  let isValid = bcrypt.compareSync(normalizedPass, currentAdmin.password_hash) ||
+                bcrypt.compareSync(String(password).trim(), currentAdmin.password_hash);
+  if (!isValid && currentAdmin.encrypted_password) {
+    const plain = decrypt(currentAdmin.encrypted_password);
+    if (plain && (plain === normalizedPass || plain === String(password).trim())) {
+      isValid = true;
+    }
+  }
 
   if (!isValid) {
     return errorResponse(res, 'كلمة المرور غير صحيحة، تم إلغاء عملية التصفير لأسباب أمنية', 403);
   }
 
-  // تنفيذ التصفير الشامل للجداول الحركية
+  // Hint: أخذ نسخة احتياطية تلقائية للأمان قبل تنفيذ التصفير الشامل
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    }
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const autoBackupPath = path.join(BACKUP_DIR, `pre_reset_safety_${stamp}.db`);
+    await db.backup(autoBackupPath);
+  } catch (backupErr) {
+    console.warn('تعذر أخذ نسخة الأمان التلقائية قبل التصفير:', backupErr.message);
+  }
+
+  const isWipeAll = resetMode === 'wipe_all';
+
+  // تنفيذ التصفير الشامل للجداول الحركية والإعدادات والمستخدمين والقوالب
   const resetTx = db.transaction(() => {
     db.exec('DELETE FROM attendance_records;');
     db.exec('DELETE FROM attendance_days;');
     db.exec('DELETE FROM leaves;');
+    db.exec('DELETE FROM official_holidays;');
     db.exec('DELETE FROM employee_schedules;');
+    db.exec('DELETE FROM schedule_templates;');
     db.exec('DELETE FROM employee_transfers;');
     db.exec('DELETE FROM chat_messages;');
     db.exec('DELETE FROM chat_members;');
     db.exec('DELETE FROM chat_channels;');
+    db.exec('DELETE FROM audit_logs;');
+
+    // حذف جميع المستخدمين الإضافيين والإبقاء على السوبر أدمن فقط
+    db.prepare("DELETE FROM users WHERE id != ? AND role != 'SUPER_ADMIN'").run(user.id);
+
+    // تصفير إعدادات النظام وإعادتها للقيم الافتراضية للمصنع
+    db.exec('DELETE FROM system_settings;');
+
+    // مسح الموظفين والأقسام لإعادة بنائها أو تركها فارغة حسب وضع التصفير
+    db.exec('DELETE FROM employees;');
+    db.exec('DELETE FROM departments;');
+
+    // تصفير عدادات الترقيم التلقائي للجداول المصفرة
+    db.exec(`
+      DELETE FROM sqlite_sequence WHERE name IN (
+        'employees', 'departments', 'attendance_records', 'leaves',
+        'official_holidays', 'employee_schedules', 'schedule_templates',
+        'employee_transfers', 'chat_channels', 'chat_messages', 'audit_logs', 'system_settings'
+      );
+    `);
+
+    // إعادة بذر الإعدادات الافتراضية وقوالب الدوام الافتراضية
+    if (typeof db.seedDefaultSettings === 'function') {
+      db.seedDefaultSettings();
+    }
+    if (typeof db.seedScheduleTemplates === 'function') {
+      db.seedScheduleTemplates();
+    }
+
+    // تسجيل حالة البذر التلقائي للموظفين
+    db.prepare('INSERT OR REPLACE INTO system_settings (key, value, description) VALUES (?, ?, ?)').run(
+      'employees_wiped_manually',
+      isWipeAll ? 'true' : 'false',
+      'منع البذر التلقائي للموظفين عند اختيار التصفير الشامل الفارغ'
+    );
   });
 
   resetTx();
+
+  // إذا اختار السوبر أدمن إعادة الضبط لنقطة البداية الأصلية، نعيد تغذية الموظفين والأقسام من ملف الإكسل الأساسي
+  if (!isWipeAll) {
+    try {
+      seedEmployees(true);
+    } catch (seedErr) {
+      console.error('خطأ أثناء إعادة تغذية الموظفين الأصلية:', seedErr.message);
+    }
+  }
+
+  // تفريغ ملف WAL لضمان كتابة التغييرات على القرص فوراً
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+  } catch (_) {}
+
+  const actionDesc = isWipeAll
+    ? 'قام السوبر أدمن بالتصفير الشامل الكامل (مع حذف كافة الموظفين والأقسام والمستخدمين والإعدادات والسجلات ليصبح النظام فارغاً تماماً)'
+    : 'قام السوبر أدمن بإعادة ضبط المصنع لنقطة البداية الأصلية (مسح كافة الحركات والمستخدمين الإضافيين والقوالب المخصصة وإعادة الإعدادات وقائمة الموظفين للنسخة الأصلية)';
 
   logAction(
     user.id,
     user.full_name,
     'تصفير النظام وإعادة الضبط',
-    'قام السوبر أدمن بتصفير كافة سجلات الحضور والإجازات والجداول والمحادثات والتنقلات بنجاح'
+    actionDesc
   );
 
-  return successResponse(res, null, 'تم تصفير النظام بنجاح، كافة سجلات الحضور والإجازات والجداول تم مسحها وإعادة النظام لنقطة البداية');
+  // جلب الإعدادات الافتراضية الجديدة لإرسالها للواجهة وتحديث حالتها فوراً
+  const rows = db.prepare('SELECT key, value FROM system_settings').all();
+  const freshSettings = {};
+  for (const r of rows) {
+    freshSettings[r.key] = r.value;
+  }
+
+  return successResponse(
+    res,
+    { resetMode, settings: freshSettings },
+    isWipeAll
+      ? 'تم التصفير الشامل بالكامل وحذف جميع الموظفين والأقسام والسجلات والإعدادات بنجاح!'
+      : 'تمت إعادة ضبط النظام لنقطة البداية الأصلية وإعادة قائمة الموظفين والإعدادات للوضع الافتراضي بنجاح!'
+  );
 }
 
 // 4. الترحيل السنوي
 function switchActiveYear(req, res) {
-  const { year } = req.body;
+  const year = req.body.year || req.body.newYear;
   const user = req.user;
 
   if (!year || isNaN(year)) {
@@ -275,7 +387,7 @@ function switchActiveYear(req, res) {
 
   logAction(user.id, user.full_name, 'ترحيل السنة المالية/الإدارية', `تم تفعيل السنة [${year}] كسنة نشطة للنظام`);
 
-  return successResponse(res, { activeYear: year }, `تم تفعيل السنة ${year} بنجاح مع بقاء كافة بيانات السنوات السابقة محفوظة`);
+  return successResponse(res, { activeYear: String(year) }, `تم تفعيل السنة ${year} بنجاح مع بقاء كافة بيانات السنوات السابقة محفوظة`);
 }
 
 module.exports = {

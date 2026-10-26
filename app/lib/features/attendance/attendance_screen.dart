@@ -177,16 +177,23 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  // النقطة 4: تصدير الإكسل المباشر الفعال
+  // النقطة 4: تصدير الإكسل المباشر الفعال مع دعم فلاتر القسم والحالة
   Future<void> _exportExcel() async {
     final dateStr = _isPreviewMode ? (_previewDate ?? DateFormatter.toYmd(_selectedDate)) : DateFormatter.toYmd(_selectedDate);
     final token = ApiClient.instance.token ?? '';
-    final url = '${ApiClient.instance.baseUrl}/reports/export-daily?date=$dateStr&token=$token';
+    String url = '${ApiClient.instance.baseUrl}/reports/export-daily?date=$dateStr&token=$token';
+    if (_selectedDept != null && _selectedDept!.isNotEmpty) {
+      url += '&department=${Uri.encodeComponent(_selectedDept!)}';
+    }
+    if (_selectedStatus != null && _selectedStatus!.isNotEmpty) {
+      url += '&status=${Uri.encodeComponent(_selectedStatus!)}';
+    }
     final uri = Uri.parse(url);
 
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تعذر فتح رابط تصدير الإكسل')),
       );
@@ -290,7 +297,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         final name = (r['name'] ?? '').toString().toLowerCase();
-        final code = (r['emp_code'] ?? '').toString().toLowerCase();
+        final code = (r['emp_code'] ?? r['empCode'] ?? '').toString().toLowerCase();
         if (!name.contains(q) && !code.contains(q)) return false;
       }
       return true;
@@ -529,6 +536,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       DropdownMenuItem(value: 'LATE', child: Text('تأخير بسيط (أصفر)', style: TextStyle(fontSize: 12))),
                       DropdownMenuItem(value: 'VERY_LATE', child: Text('تأخير كبير (برتقالي)', style: TextStyle(fontSize: 12))),
                       DropdownMenuItem(value: 'EARLY_LEAVE', child: Text('انصراف مبكر', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'MISSED_PUNCH', child: Text('بصمة ناقصة (بنفسجي)', style: TextStyle(fontSize: 12))),
                       DropdownMenuItem(value: 'ABSENT', child: Text('غائب (أحمر)', style: TextStyle(fontSize: 12))),
                       DropdownMenuItem(value: 'ON_LEAVE', child: Text('مجاز رسمي', style: TextStyle(fontSize: 12))),
                       DropdownMenuItem(value: 'OFF_DAY', child: Text('يوم راحة', style: TextStyle(fontSize: 12))),
@@ -580,7 +588,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                     radius: 18,
                                     backgroundColor: statusColor.withOpacity(0.12),
                                     child: Text(
-                                      '${r['emp_code']}',
+                                      '${r['emp_code'] ?? r['empCode'] ?? ''}',
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: statusColor),
                                     ),
                                   ),
@@ -600,7 +608,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   subtitle: Row(
                                     children: [
                                       Text(
-                                        'الدخول: ${DateFormatter.formatTime12h(r['first_punch'])}  |  الخروج: ${DateFormatter.formatTime12h(r['last_punch'])}',
+                                        'الدخول: ${DateFormatter.formatTime12h(r['first_punch'] ?? r['firstPunch'])}  |  الخروج: ${DateFormatter.formatTime12h(r['last_punch'] ?? r['lastPunch'])}',
                                         style: const TextStyle(fontSize: 12),
                                       ),
                                       if (r['notes'] != null && r['notes'].toString().isNotEmpty) ...[

@@ -5,15 +5,15 @@
 const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
+const { getBaghdadDateStr, getDayOfWeekFromYmd, addDaysYmd } = require('../../tools/timeUtils');
 
 /**
- * حساب يوم الأحد لبداية الأسبوع لأي تاريخ محدد
+ * Hint: حساب يوم الأحد لبداية الأسبوع لأي تاريخ محدد دون تأثر بانحراف التوقيت العالمي UTC
  */
 function getWeekSunday(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getDay(); // 0 = Sunday
-  d.setDate(d.getDate() - day);
-  return d.toISOString().split('T')[0];
+  const cleanDate = dateStr || getBaghdadDateStr();
+  const day = getDayOfWeekFromYmd(cleanDate); // 0 = Sunday
+  return addDaysYmd(cleanDate, -day);
 }
 
 /**
@@ -96,7 +96,7 @@ function getAssignments(req, res) {
   let { weekStartDate, department } = req.query;
 
   if (!weekStartDate) {
-    weekStartDate = getWeekSunday(new Date().toISOString().split('T')[0]);
+    weekStartDate = getWeekSunday(getBaghdadDateStr());
   }
 
   // جلب كافة الموظفين النشطين وغير المستبعدين
@@ -199,7 +199,7 @@ function assignSchedule(req, res) {
   }
 
   const type = scheduleType === 'WEEKLY' ? 'WEEKLY' : 'FIXED';
-  const targetWeek = type === 'WEEKLY' ? (weekStartDate || getWeekSunday(new Date().toISOString().split('T')[0])) : null;
+  const targetWeek = type === 'WEEKLY' ? (weekStartDate || getWeekSunday(getBaghdadDateStr())) : null;
   const workDaysJson = Array.isArray(workDays) ? JSON.stringify(workDays) : null;
 
   const deleteWeeklyStmt = db.prepare('DELETE FROM employee_schedules WHERE employee_id = ? AND schedule_type = \'WEEKLY\' AND week_start_date = ?');
@@ -244,10 +244,8 @@ function copyPreviousWeek(req, res) {
     return errorResponse(res, 'يرجى تحديد تاريخ بداية الأسبوع المستهدف', 400);
   }
 
-  // حساب الأسبوع السابق (قبل 7 أيام)
-  const targetDate = new Date(targetWeekStartDate);
-  targetDate.setDate(targetDate.getDate() - 7);
-  const prevWeekStartDate = targetDate.toISOString().split('T')[0];
+  // Hint: حساب الأسبوع السابق (قبل 7 أيام) بدقة دون انزلاق التاريخ بسبب فرق التوقيت
+  const prevWeekStartDate = addDaysYmd(targetWeekStartDate, -7);
 
   // جلب كافة جداول الأسبوع السابق
   const prevSchedules = db.prepare(`

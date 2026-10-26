@@ -5,6 +5,7 @@
 const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
+const { recalculateCommittedDayIfExists } = require('../attendance/attendanceEngine');
 
 // 1. الإجازات
 function listLeaves(req, res) {
@@ -108,6 +109,16 @@ function deleteLeave(req, res) {
 
   db.prepare('DELETE FROM leaves WHERE id = ?').run(id);
 
+  // Hint: إعادة احتساب الأيام المعتمدة الواقعة ضمن فترة الإجازة المحذوفة لتحديث حالة الموظف تلقائياً
+  const affectedDays = db.prepare(`
+    SELECT date FROM attendance_days 
+    WHERE date BETWEEN ? AND ? AND status = 'COMMITTED'
+  `).all(leave.start_date, leave.end_date);
+
+  for (const d of affectedDays) {
+    recalculateCommittedDayIfExists(d.date, user.id);
+  }
+
   logAction(
     user.id,
     user.full_name,
@@ -177,6 +188,9 @@ function deleteHoliday(req, res) {
   }
 
   db.prepare('DELETE FROM official_holidays WHERE id = ?').run(id);
+
+  // Hint: إعادة احتساب اليوم إذا كان معتمداً مسبقاً لإرجاع حالة الحضور الفعلية بدلاً من HOLIDAY
+  recalculateCommittedDayIfExists(holiday.date, user.id);
 
   logAction(user.id, user.full_name, 'حذف عطلة رسمية', `حذف العطلة [${holiday.title}] لتاريخ ${holiday.date}`);
 

@@ -16,14 +16,28 @@ if (!fs.existsSync(brandingDir)) {
   fs.mkdirSync(brandingDir, { recursive: true });
 }
 
+// Hint: السماح فقط بامتدادات الصور الآمنة لشعار المؤسسة
+const ALLOWED_LOGO_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+
 const logoStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, brandingDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.png';
-    cb(null, `logo_${Date.now()}${ext}`);
+    const rawExt = path.extname(file.originalname || '').toLowerCase();
+    const safeExt = ALLOWED_LOGO_EXTS.has(rawExt) ? rawExt : '.png';
+    cb(null, `logo_${Date.now()}${safeExt}`);
   }
 });
-const uploadLogo = multer({ storage: logoStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadLogo = multer({
+  storage: logoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_LOGO_EXTS.has(ext)) {
+      return cb(new Error('يُسمح فقط برفع ملفات الصور للشعار (PNG, JPG, WEBP, GIF)'));
+    }
+    cb(null, true);
+  }
+});
 
 // 1. الإعدادات العامة (عرض للجميع ومصادقة، والتعديل حصري للسوبر أدمن)
 router.get('/', authenticateToken, settingController.getSettings);

@@ -16,14 +16,29 @@ if (!fs.existsSync(avatarsDir)) {
   fs.mkdirSync(avatarsDir, { recursive: true });
 }
 
+// Hint: الامتدادات المسموحة للصور الشخصية لمنع رفع أي ملفات تنفيذية أو برمجية ضارة
+const ALLOWED_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, avatarsDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.png';
-    cb(null, `avatar_${req.user.id}_${Date.now()}${ext}`);
+    const rawExt = path.extname(file.originalname || '').toLowerCase();
+    const safeExt = ALLOWED_IMAGE_EXTS.has(rawExt) ? rawExt : '.png';
+    cb(null, `avatar_${req.user.id}_${Date.now()}${safeExt}`);
   }
 });
-const uploadAvatar = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.has(ext)) {
+      return cb(new Error('يُسمح فقط برفع ملفات الصور (PNG, JPG, WEBP, GIF)'));
+    }
+    cb(null, true);
+  }
+});
 
 router.post('/login', authController.login);
 router.get('/me', authenticateToken, authController.getMe);

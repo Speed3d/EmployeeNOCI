@@ -18,6 +18,7 @@ class AuthProvider extends ChangeNotifier {
   String? _logoUrl;
   String _institutionName = AppConstants.institutionName;
   String _appTitle = AppConstants.appTitle;
+  String _activeYear = '2026';
 
   Map<String, dynamic>? get user => _user;
   bool get isLoading => _isLoading;
@@ -28,6 +29,7 @@ class AuthProvider extends ChangeNotifier {
   String? get logoUrl => _logoUrl;
   String get institutionName => _institutionName;
   String get appTitle => _appTitle;
+  String get activeYear => _activeYear;
 
   String? get fullLogoUrl {
     if (_logoUrl == null || _logoUrl!.isEmpty) return null;
@@ -62,6 +64,14 @@ class AuthProvider extends ChangeNotifier {
     _logoUrl = prefs.getString('branding_logo_url');
     _institutionName = prefs.getString('branding_institution_name') ?? AppConstants.institutionName;
     _appTitle = prefs.getString('branding_app_title') ?? AppConstants.appTitle;
+    _activeYear = prefs.getString('branding_active_year') ?? '2026';
+
+    // Hint: ربط معالج انتهاء الجلسة (401) لتسجيل الخروج تلقائياً
+    ApiClient.instance.onUnauthorized = () {
+      if (_user != null) {
+        logout();
+      }
+    };
 
     _isLoading = false;
     notifyListeners();
@@ -85,11 +95,15 @@ class AuthProvider extends ChangeNotifier {
         if (res['appTitle'] != null && res['appTitle'].toString().isNotEmpty) {
           _appTitle = res['appTitle'];
         }
+        if (res['activeYear'] != null && res['activeYear'].toString().isNotEmpty) {
+          _activeYear = res['activeYear'].toString();
+        }
 
         final prefs = await SharedPreferences.getInstance();
         if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
         await prefs.setString('branding_institution_name', _institutionName);
         await prefs.setString('branding_app_title', _appTitle);
+        await prefs.setString('branding_active_year', _activeYear);
 
         notifyListeners();
       }
@@ -118,6 +132,9 @@ class AuthProvider extends ChangeNotifier {
       if (systemStatus['appTitle'] != null && systemStatus['appTitle'].toString().isNotEmpty) {
         _appTitle = systemStatus['appTitle'];
       }
+      if (systemStatus['activeYear'] != null && systemStatus['activeYear'].toString().isNotEmpty) {
+        _activeYear = systemStatus['activeYear'].toString();
+      }
     }
 
     await ApiClient.instance.setToken(token);
@@ -127,6 +144,7 @@ class AuthProvider extends ChangeNotifier {
     if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
     await prefs.setString('branding_institution_name', _institutionName);
     await prefs.setString('branding_app_title', _appTitle);
+    await prefs.setString('branding_active_year', _activeYear);
 
     notifyListeners();
   }
@@ -182,6 +200,15 @@ class AuthProvider extends ChangeNotifier {
 
   void updateBanner(String? bannerText) {
     _announcementBanner = bannerText;
+    notifyListeners();
+  }
+
+  /// Hint: تحديث السنة المالية/الإدارية النشطة في المزود والتخزين المحلي
+  Future<void> setActiveYear(String year) async {
+    if (year.trim().isEmpty) return;
+    _activeYear = year.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('branding_active_year', _activeYear);
     notifyListeners();
   }
 }

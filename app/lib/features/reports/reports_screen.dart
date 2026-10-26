@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 
@@ -68,60 +69,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  // تصدير التقرير الشهري الحالي كملف إكسل
+  /// Hint: تصدير التقرير الشهري الحالي كملف إكسل (.xlsx) برابط تحميل مباشر يعمل على المتصفح وسطح المكتب
   Future<void> _exportMonthlyExcel() async {
     if (_reportData.isEmpty) return;
 
     try {
-      final headers = [
-        'المعرف',
-        'الاسم',
-        'القسم',
-        'أيام الحضور',
-        'أيام الالتزام (في الوقت)',
-        'أيام التأخير',
-        'أيام الغياب',
-        'أيام الإجازة',
-        'أيام الراحة',
-        'أيام العطل الرسمية',
-        'إجمالي دقائق التأخير',
-        'إجمالي دقائق الانصراف المبكر',
-        'إجمالي مكافأة الحضور المبكر (د)',
-        'إجمالي الدوام الإضافي (د)',
-      ];
+      final token = ApiClient.instance.token ?? '';
+      String url = '${ApiClient.instance.baseUrl}/reports/export-monthly?year=$_selectedYear&month=$_selectedMonth&token=$token';
+      if (_selectedDept != null && _selectedDept!.isNotEmpty) {
+        url += '&department=${Uri.encodeComponent(_selectedDept!)}';
+      }
 
-      final rows = _reportData.map((r) => [
-        r['emp_code'],
-        r['name'],
-        r['department'],
-        r['days_present'],
-        r['days_on_time'],
-        r['days_late'],
-        r['days_absent'],
-        r['days_on_leave'],
-        r['days_off'],
-        r['days_holiday'],
-        r['total_late_minutes'],
-        r['total_early_leave_minutes'],
-        r['total_early_bonus_minutes'],
-        r['total_overtime_minutes'],
-      ]).toList();
-
-      final fileName = 'تقرير_شهري_${_selectedYear}_$_selectedMonth';
-      final title = 'تقرير شهر $_selectedMonth لسنة $_selectedYear';
-
-      // استدعاء نقطة التصدير العامة
-      await ApiClient.instance.post('/reports/export-excel', {
-        'title': title,
-        'fileName': fileName,
-        'headers': headers,
-        'rows': rows,
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم تصدير التقرير بنجاح!')),
-      );
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: AppColors.onTime, content: Text('جاري تنزيل ملف التقرير الشهري (Excel)...')),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: AppColors.danger, content: Text('تعذر فتح رابط تنزيل ملف الإكسل')),
+        );
+      }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(backgroundColor: AppColors.danger, content: Text('فشل التصدير: $e')),
       );
@@ -288,10 +261,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       DataColumn(label: Text('الغياب', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('الإجازات', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('أيام الراحة', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      DataColumn(label: Text('العطل الرسمية', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('دقائق التأخير', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('الانصراف المبكر (د)', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      DataColumn(label: Text('مكافأة التبكير (د)', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      DataColumn(label: Text('الدوام الإضافي (د)', style: TextStyle(fontWeight: FontWeight.bold))),
                                     ],
                                     rows: _reportData.map((r) {
+                                      final totalLateDays = (r['days_late'] ?? 0) + (r['days_very_late'] ?? 0);
                                       return DataRow(
                                         cells: [
                                           DataCell(Text('${r['emp_code']}')),
@@ -299,12 +276,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           DataCell(Text(r['department'] ?? '')),
                                           DataCell(Text('${r['days_present']}', style: const TextStyle(color: AppColors.onTime, fontWeight: FontWeight.bold))),
                                           DataCell(Text('${r['days_on_time']}')),
-                                          DataCell(Text('${r['days_late']}', style: TextStyle(color: (r['days_late'] ?? 0) > 0 ? AppColors.late : null))),
+                                          DataCell(Text('$totalLateDays', style: TextStyle(color: totalLateDays > 0 ? AppColors.late : null))),
                                           DataCell(Text('${r['days_absent']}', style: TextStyle(color: (r['days_absent'] ?? 0) > 0 ? AppColors.danger : null, fontWeight: FontWeight.bold))),
                                           DataCell(Text('${r['days_on_leave']}', style: const TextStyle(color: AppColors.info))),
                                           DataCell(Text('${r['days_off']}')),
+                                          DataCell(Text('${r['days_holiday'] ?? 0}')),
                                           DataCell(Text('${r['total_late_minutes']} د')),
                                           DataCell(Text('${r['total_early_leave_minutes']} د')),
+                                          DataCell(Text('${r['total_early_bonus_minutes'] ?? 0} د', style: const TextStyle(color: AppColors.onTime))),
+                                          DataCell(Text('${r['total_overtime_minutes'] ?? 0} د', style: const TextStyle(color: AppColors.navy))),
                                         ],
                                       );
                                     }).toList(),

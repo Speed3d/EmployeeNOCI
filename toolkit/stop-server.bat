@@ -4,6 +4,6 @@ title إيقاف خادم نظام الحضور
 
 echo جاري فحص وإيقاف أي خادم يعمل على المنفذ 5000...
 
-powershell -Command "Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host '✔ تم إيقاف الخادم بنجاح!'"
+powershell -Command "Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host '✔ تم إيقاف الخادم بنجاح!'"
 
 pause

@@ -41,8 +41,12 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _loadConversations(initial: true);
 
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       _pollActiveConversation();
+      // Hint: تحديث قائمة المحادثات والعدادات كل 6 ثوانٍ لضمان ظهور المجموعات والرسائل الجديدة فوراً
+      if (timer.tick % 2 == 0) {
+        _loadConversations();
+      }
     });
   }
 
@@ -229,20 +233,6 @@ class _ChatScreenState extends State<ChatScreen> {
       return s.trim();
     }
 
-    Future<void> submit() async {
-      if (isVerifying) return;
-      final pwd = cleanDigits(passwordCtrl.text);
-      if (pwd.isEmpty) {
-        return;
-      }
-      try {
-        await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
-        if (mounted) Navigator.pop(context, true);
-      } catch (e) {
-        throw Exception(e);
-      }
-    }
-
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -274,9 +264,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       autofocus: true,
                       decoration: InputDecoration(
                         labelText: 'كلمة مرور السوبر أدمن',
-                        hintText: 'Admin@123456',
-                        helperText: 'كلمة المرور الافتراضية: Admin@123456',
-                        helperStyle: const TextStyle(fontSize: 11, color: AppColors.navy),
+                        hintText: 'أدخل كلمة مرور الحساب الحالية',
                         prefixIcon: const Icon(Icons.lock_outline_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),

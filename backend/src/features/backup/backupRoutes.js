@@ -9,7 +9,8 @@ const fs = require('fs');
 const backupController = require('./backupController');
 const { authenticateToken, requireSuperAdmin } = require('../../core/authMiddleware');
 
-const tempUploadDir = path.join(__dirname, '../../../backend/data/temp_uploads');
+// Hint: المسار الصحيح لمجلد الرفع المؤقت داخل backend/data/temp_uploads
+const tempUploadDir = path.join(__dirname, '../../../data/temp_uploads');
 if (!fs.existsSync(tempUploadDir)) {
   fs.mkdirSync(tempUploadDir, { recursive: true });
 }

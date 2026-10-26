@@ -165,20 +165,20 @@ class _MainLayoutState extends State<MainLayout> {
 
                 const Spacer(),
 
-                // شارة السنة النشطة
+                // Hint: شارة السنة النشطة المرتبطة ديناميكياً بإعدادات النظام
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.navy.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.navy),
-                      SizedBox(width: 4),
+                      const Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.navy),
+                      const SizedBox(width: 4),
                       Text(
-                        '2026',
-                        style: TextStyle(
+                        auth.activeYear,
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           color: AppColors.navy,

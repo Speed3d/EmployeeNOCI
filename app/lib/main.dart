@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme.dart';
 import 'core/constants.dart';
 import 'core/api_client.dart';
@@ -18,6 +19,9 @@ import 'features/settings/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Hint: تهيئة بيانات اللغة العربية لمكتبة التواريخ (intl) لمنع استثناء LocaleDataException
+  await initializeDateFormatting('ar', null);
 
   // تهيئة العميل والمصادقة
   await ApiClient.instance.init();

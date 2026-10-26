@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
+import '../../core/constants.dart';
 import 'employee_dialog.dart';
 
 /// Hint: شاشة إدارة سجلات الموظفين ودليل المقر ونقل الموظفين (النقطة 16)
@@ -411,15 +412,19 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                       separatorBuilder: (_, __) => const Divider(height: 1),
                                       itemBuilder: (ctx, i) {
                                         final t = transfers[i];
+                                        final fromDept = t['from_department'] ?? t['previous_department'] ?? '-';
+                                        final toDept = t['to_department'] ?? t['new_department'] ?? '-';
+                                        final byName = t['transferred_by_name'];
                                         return ListTile(
                                           dense: true,
                                           leading: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy, size: 20),
                                           title: Text(
-                                            'من [${t['previous_department']}] ⬅️ إلى [${t['new_department']}]',
+                                            'من [$fromDept] ⬅️ إلى [$toDept]',
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                           ),
                                           subtitle: Text(
-                                            (t['reason'] != null ? 'الأمر/السبب: ${t['reason']}' : '') +
+                                            (t['reason'] != null && t['reason'].toString().isNotEmpty ? 'الأمر/السبب: ${t['reason']}' : 'نقل إداري') +
+                                                (byName != null ? ' • بواسطة: $byName' : '') +
                                                 (t['created_at'] != null ? ' • بتاريخ: ${t['created_at'].toString().split(' ')[0]}' : ''),
                                             style: const TextStyle(fontSize: 11),
                                           ),
@@ -435,15 +440,21 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                       separatorBuilder: (_, __) => const Divider(height: 1),
                                       itemBuilder: (ctx, i) {
                                         final a = attendance[i];
+                                        final rawStatus = (a['status'] ?? 'ABSENT').toString();
+                                        final statusLabel = AppConstants.getStatusLabel(rawStatus);
+                                        final statusColor = AppConstants.getStatusColor(rawStatus);
+                                        final firstPunch = a['first_punch'] ?? a['check_in_time'] ?? '--:--';
+                                        final lastPunch = a['last_punch'] ?? a['check_out_time'] ?? '--:--';
+                                        final lateMins = a['late_minutes'] ?? a['delay_minutes'] ?? 0;
                                         return ListTile(
                                           dense: true,
-                                          leading: const Icon(Icons.access_time_filled_rounded, color: AppColors.onTime, size: 18),
+                                          leading: Icon(Icons.access_time_filled_rounded, color: statusColor, size: 18),
                                           title: Text(
-                                            'التاريخ: ${a['date']} • الحالة: ${a['status']}',
+                                            'التاريخ: ${a['date']} • الحالة: $statusLabel',
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                           ),
                                           subtitle: Text(
-                                            'دخول: ${a['check_in_time'] ?? '--:--'} • خروج: ${a['check_out_time'] ?? '--:--'} • تأخير: ${a['delay_minutes'] ?? 0} دقيقة',
+                                            'دخول: $firstPunch • خروج: $lastPunch • تأخير: $lateMins دقيقة',
                                             style: const TextStyle(fontSize: 11),
                                           ),
                                         );

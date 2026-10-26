@@ -9,7 +9,7 @@
  */
 const db = require('../../core/database');
 const { ATTENDANCE_STATUS } = require('../../shared/constants');
-const { timeToMinutes, extractTime } = require('../../tools/timeUtils');
+const { timeToMinutes, extractTime, getDayOfWeekFromYmd } = require('../../tools/timeUtils');
 const { getEmployeeWorkDays } = require('../schedules/scheduleController');
 
 /**
@@ -81,8 +81,8 @@ function processAttendanceForDay(dateStr, punchList = [], options = {}) {
     leaveMap.set(l.employee_id, l);
   }
 
-  // يوم الأسبوع (0 = أحد، 1 = إثنين، ... 6 = سبت)
-  const dayOfWeek = new Date(dateStr).getDay();
+  // Hint: يوم الأسبوع (0 = أحد، 1 = إثنين، ... 6 = سبت) محسوب بشكل محايد زمنياً لمنع انحراف التوقيت
+  const dayOfWeek = getDayOfWeekFromYmd(dateStr);
 
   const results = [];
 
@@ -146,17 +146,24 @@ function processAttendanceForDay(dateStr, punchList = [], options = {}) {
       const entryMin = timeToMinutes(entryTimeStr);
       const exitMin = timeToMinutes(exitTimeStr);
 
-      // في حال وجود بصمة واحدة فقط
+      // Hint: في حال وجود بصمة واحدة فقط يتم فحص التوقيت بدقة مع التحقق من صحة قيمة الدقائق (entryMin !== null)
       if (punchCount === 1) {
-        // إذا كانت البصمة الوحيدة بعد الساعة 12:30 ظهراً (750 دقيقة) -> تعتبر بصمة خروج فقط
-        if (entryMin && entryMin >= 750) {
+        if (entryMin === null) {
+          status = ATTENDANCE_STATUS.MISSED_PUNCH;
+          notes = 'بصمة ناقصة (تعذر قراءة توقيت البصمة)';
+        } else if (entryMin >= 750) {
+          // إذا كانت البصمة الوحيدة بعد الساعة 12:30 ظهراً (750 دقيقة) -> تعتبر بصمة خروج فقط
           status = ATTENDANCE_STATUS.MISSED_PUNCH;
           firstPunch = null;
           lastPunch = punchData.firstPunch;
           notes = 'سجل بصمة خروج فقط (لم يبصم دخول صباحاً)';
         } else {
-          // بصمة دخول صباحي فقط
-          if (entryMin <= workStartMin) {
+          // بصمة دخول صباحي فقط (مع احتساب البونص الصباحي إن كان مفعلاً)
+          if (rules.bonusEnabled && entryMin < earlyBonusMin) {
+            earlyBonusMinutes = earlyBonusMin - entryMin;
+            status = ATTENDANCE_STATUS.ON_TIME;
+            notes = `حضور مبكر بمكافأة (+${earlyBonusMinutes} د) | لم يسجل بصمة خروج`;
+          } else if (entryMin <= workStartMin) {
             status = ATTENDANCE_STATUS.ON_TIME;
             notes = 'حضور في الوقت المحدد | لم يسجل بصمة خروج';
           } else if (entryMin <= workStartMin + 30) {
@@ -211,22 +218,34 @@ function processAttendanceForDay(dateStr, punchList = [], options = {}) {
       }
     }
 
+    // Hint: تضمين المفاتيح بصيغتي camelCase و snake_case لضمان التوافق التام بين وضع المعاينة (Preview) واليوم المعتمد (Committed)
     results.push({
       employeeId: emp.id,
+      employee_id: emp.id,
       empCode: emp.emp_code,
+      emp_code: emp.emp_code,
       name: emp.name,
       department: emp.department,
       departmentSnapshot: emp.department,
+      department_snapshot: emp.department,
       date: dateStr,
       firstPunch,
+      first_punch: firstPunch,
       lastPunch,
+      last_punch: lastPunch,
       punchCount,
+      punch_count: punchCount,
       punchDetails: JSON.stringify(punchDetails),
+      punch_details: JSON.stringify(punchDetails),
       status,
       lateMinutes,
+      late_minutes: lateMinutes,
       earlyLeaveMinutes,
+      early_leave_minutes: earlyLeaveMinutes,
       earlyBonusMinutes,
+      early_bonus_minutes: earlyBonusMinutes,
       overtimeMinutes,
+      overtime_minutes: overtimeMinutes,
       notes,
       year: rules.activeYear
     });
@@ -235,6 +254,7 @@ function processAttendanceForDay(dateStr, punchList = [], options = {}) {
   // حساب الإحصائيات العامة للكشف
   const stats = {
     date: dateStr,
+    total: results.length,
     totalEmployees: results.length,
     present: results.filter(r => [ATTENDANCE_STATUS.ON_TIME, ATTENDANCE_STATUS.LATE, ATTENDANCE_STATUS.VERY_LATE, ATTENDANCE_STATUS.EARLY_LEAVE].includes(r.status)).length,
     onTime: results.filter(r => r.status === ATTENDANCE_STATUS.ON_TIME).length,
@@ -242,7 +262,8 @@ function processAttendanceForDay(dateStr, punchList = [], options = {}) {
     absent: results.filter(r => r.status === ATTENDANCE_STATUS.ABSENT).length,
     onLeave: results.filter(r => r.status === ATTENDANCE_STATUS.ON_LEAVE).length,
     offDay: results.filter(r => r.status === ATTENDANCE_STATUS.OFF_DAY).length,
-    holiday: results.filter(r => r.status === ATTENDANCE_STATUS.HOLIDAY).length
+    holiday: results.filter(r => r.status === ATTENDANCE_STATUS.HOLIDAY).length,
+    missedPunch: results.filter(r => r.status === ATTENDANCE_STATUS.MISSED_PUNCH).length
   };
 
   // 5. الحفظ في قاعدة البيانات فقط عند الاعتماد (persist: true)
@@ -298,7 +319,49 @@ function processAttendanceForDay(dateStr, punchList = [], options = {}) {
   };
 }
 
+/**
+ * Hint: إعادة احتساب يوم معتمد تلقائياً في حال تغيير الإجازات أو العطل الرسمية المرتبطة به
+ */
+function recalculateCommittedDayIfExists(dateStr, userId = null) {
+  const day = db.prepare('SELECT * FROM attendance_days WHERE date = ? AND status = \'COMMITTED\'').get(dateStr);
+  if (!day) return false;
+
+  let punchList = [];
+  if (day.raw_punches_json) {
+    try {
+      punchList = JSON.parse(day.raw_punches_json);
+    } catch (_) {
+      punchList = [];
+    }
+  } else {
+    const stored = db.prepare(`
+      SELECT a.first_punch, a.last_punch, a.punch_count, a.punch_details, e.emp_code, e.name, e.department
+      FROM attendance_records a
+      JOIN employees e ON e.id = a.employee_id
+      WHERE a.date = ? AND (a.first_punch IS NOT NULL OR a.last_punch IS NOT NULL)
+    `).all(dateStr);
+
+    punchList = stored.map(s => ({
+      empCode: s.emp_code,
+      name: s.name,
+      department: s.department,
+      firstPunch: s.first_punch || s.last_punch,
+      lastPunch: s.last_punch || s.first_punch,
+      punchCount: s.punch_count || 1,
+      allPunches: s.punch_details ? JSON.parse(s.punch_details) : [s.first_punch || s.last_punch]
+    }));
+  }
+
+  processAttendanceForDay(dateStr, punchList, {
+    persist: true,
+    userId: userId || day.committed_by,
+    rawPunchesJson: JSON.stringify(punchList)
+  });
+  return true;
+}
+
 module.exports = {
   getSystemRules,
-  processAttendanceForDay
+  processAttendanceForDay,
+  recalculateCommittedDayIfExists
 };

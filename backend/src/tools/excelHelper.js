@@ -21,16 +21,17 @@ function cleanText(rawText) {
 }
 
 /**
- * قراءة ملف الموظفين الأساسي
+ * Hint: قراءة ملف الموظفين الأساسي مع تحويل الخلايا الرقمية والنصية بدقة
  */
 function parseMasterEmployeesFile(filePathOrBuffer) {
   const wb = typeof filePathOrBuffer === 'string' 
-    ? xlsx.readFile(filePathOrBuffer) 
-    : xlsx.read(filePathOrBuffer, { type: 'buffer' });
+    ? xlsx.readFile(filePathOrBuffer, { cellDates: true }) 
+    : xlsx.read(filePathOrBuffer, { type: 'buffer', cellDates: true });
   
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
-  const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+  // Hint: استخدام raw: false لضمان تحويل كافة الحقول والأكواد إلى نصوص مقروءة
+  const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
 
   if (!rawRows || rawRows.length < 2) {
     throw new Error('الملف فارغ أو لا يحتوي على صفوف بيانات');
@@ -99,16 +100,17 @@ function parseMasterEmployeesFile(filePathOrBuffer) {
 }
 
 /**
- * قراءة وتحليل ملف كشف البصمة اليومي
+ * Hint: قراءة وتحليل ملف كشف البصمة اليومي مع دعم التواريخ النصية وتواريخ Excel الرقمية (Serial Dates)
  */
 function parseDailyAttendanceFile(filePathOrBuffer) {
   const wb = typeof filePathOrBuffer === 'string' 
-    ? xlsx.readFile(filePathOrBuffer) 
-    : xlsx.read(filePathOrBuffer, { type: 'buffer' });
+    ? xlsx.readFile(filePathOrBuffer, { cellDates: true }) 
+    : xlsx.read(filePathOrBuffer, { type: 'buffer', cellDates: true });
   
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
-  const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+  // Hint: تمرير raw: false و dateNF لضمان تنسيق خلايا الوقت الرقمية بصيغة قياسية موحدة
+  const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
 
   if (!rawRows || rawRows.length < 2) {
     throw new Error('ملف البصمة فارغ أو لا يحتوي على حركات');

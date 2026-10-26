@@ -13,6 +13,9 @@ class ApiClient {
   String _baseUrl = AppConstants.defaultBaseUrl;
   String? _token;
 
+  /// Hint: رد نداء يتم استدعاؤه تلقائياً عند انتهاء صلاحية الجلسة (401 Unauthorized) لتسجيل الخروج الفوري
+  VoidCallback? onUnauthorized;
+
   String get baseUrl => _baseUrl;
   String? get token => _token;
 
@@ -71,7 +74,7 @@ class ApiClient {
   Future<dynamic> get(String endpoint) async {
     final uri = Uri.parse('$_baseUrl$endpoint');
     final res = await http.get(uri, headers: _headers());
-    return _handleResponse(res);
+    return _handleResponse(res, endpoint: endpoint);
   }
 
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
@@ -81,7 +84,7 @@ class ApiClient {
       headers: _headers(),
       body: jsonEncode(body),
     );
-    return _handleResponse(res);
+    return _handleResponse(res, endpoint: endpoint);
   }
 
   Future<dynamic> put(String endpoint, Map<String, dynamic> body) async {
@@ -91,13 +94,13 @@ class ApiClient {
       headers: _headers(),
       body: jsonEncode(body),
     );
-    return _handleResponse(res);
+    return _handleResponse(res, endpoint: endpoint);
   }
 
   Future<dynamic> delete(String endpoint) async {
     final uri = Uri.parse('$_baseUrl$endpoint');
     final res = await http.delete(uri, headers: _headers());
-    return _handleResponse(res);
+    return _handleResponse(res, endpoint: endpoint);
   }
 
   /// Hint: رفع ملف كشف البصمة اليومي عبر MultipartRequest
@@ -117,10 +120,11 @@ class ApiClient {
 
     final streamedRes = await req.send();
     final res = await http.Response.fromStream(streamedRes);
-    return _handleResponse(res);
+    return _handleResponse(res, endpoint: endpoint);
   }
 
-  dynamic _handleResponse(http.Response res) {
+  /// Hint: معالجة استجابات الخادم الموحدة مع التوجيه التلقائي لشاشة الدخول عند انتهاء الجلسة (401)
+  dynamic _handleResponse(http.Response res, {String endpoint = ''}) {
     dynamic decoded;
     try {
       decoded = jsonDecode(utf8.decode(res.bodyBytes));
@@ -131,6 +135,11 @@ class ApiClient {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return decoded['data'] ?? decoded;
     } else {
+      if (res.statusCode == 401 &&
+          !endpoint.startsWith('/auth/login') &&
+          !endpoint.startsWith('/auth/verify-password')) {
+        onUnauthorized?.call();
+      }
       final msg = decoded is Map && decoded['message'] != null
           ? decoded['message']
           : 'خطأ في الاتصال (${res.statusCode})';

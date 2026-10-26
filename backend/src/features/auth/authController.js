@@ -9,9 +9,51 @@ const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
 const { encrypt, decrypt } = require('../../core/cryptoHelper');
 
+// Hint: سجل محاولات الدخول والتحقق الفاشلة في الذاكرة لحماية النظام من هجمات التخمين (Brute-Force Protection)
+const failedAuthAttempts = new Map();
+const MAX_AUTH_ATTEMPTS = 15;
+const AUTH_LOCKOUT_MS = 15 * 60 * 1000; // 15 دقيقة
+
+/**
+ * Hint: فحص ما إذا كان عنوان الـ IP متجاوزاً لعدد المحاولات الفاشلة المسموح بها
+ */
+function isRateLimited(ipKey) {
+  const record = failedAuthAttempts.get(ipKey);
+  if (!record) return false;
+  if (Date.now() - record.firstAttemptAt > AUTH_LOCKOUT_MS) {
+    failedAuthAttempts.delete(ipKey);
+    return false;
+  }
+  return record.count >= MAX_AUTH_ATTEMPTS;
+}
+
+/**
+ * Hint: تسجيل محاولة فاشلة لعنوان الـ IP
+ */
+function recordFailedAttempt(ipKey) {
+  const now = Date.now();
+  const record = failedAuthAttempts.get(ipKey);
+  if (!record || now - record.firstAttemptAt > AUTH_LOCKOUT_MS) {
+    failedAuthAttempts.set(ipKey, { count: 1, firstAttemptAt: now });
+  } else {
+    record.count += 1;
+  }
+}
+
+/**
+ * Hint: تصفير عداد المحاولات الفاشلة بعد نجاح المصادقة
+ */
+function clearFailedAttempts(ipKey) {
+  failedAuthAttempts.delete(ipKey);
+}
+
 function login(req, res) {
   const { username, password } = req.body;
-  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+
+  if (isRateLimited(`login_${clientIp}`)) {
+    return errorResponse(res, 'تم تجاوز الحد المسموح لمحاولات تسجيل الدخول. يرجى الانتظار 15 دقيقة ثم المحاولة مجدداً', 429);
+  }
 
   if (!username || !password) {
     return errorResponse(res, 'يرجى إدخال اسم المستخدم وكلمة المرور', 400);
@@ -19,6 +61,7 @@ function login(req, res) {
 
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.trim());
   if (!user) {
+    recordFailedAttempt(`login_${clientIp}`);
     logAction(null, username, 'محاولة دخول فاشلة', 'اسم المستخدم غير موجود', clientIp);
     return errorResponse(res, 'بيانات الدخول غير صحيحة', 401);
   }
@@ -30,9 +73,12 @@ function login(req, res) {
 
   const isPasswordValid = bcrypt.compareSync(password, user.password_hash);
   if (!isPasswordValid) {
+    recordFailedAttempt(`login_${clientIp}`);
     logAction(user.id, user.full_name, 'محاولة دخول فاشلة', 'كلمة المرور غير صحيحة', clientIp);
     return errorResponse(res, 'بيانات الدخول غير صحيحة', 401);
   }
+
+  clearFailedAttempts(`login_${clientIp}`);
 
   const bannerSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_text');
   const bannerActiveSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_active');
@@ -61,6 +107,7 @@ function login(req, res) {
   const logoSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('logo_url');
   const institutionSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('institution_name');
   const appTitleSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('app_title');
+  const activeYearSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('active_year');
 
   return successResponse(res, {
     token,
@@ -78,7 +125,8 @@ function login(req, res) {
       isMaintenance,
       logoUrl: logoSetting ? logoSetting.value : '',
       institutionName: institutionSetting ? institutionSetting.value : '',
-      appTitle: appTitleSetting ? appTitleSetting.value : ''
+      appTitle: appTitleSetting ? appTitleSetting.value : '',
+      activeYear: activeYearSetting ? activeYearSetting.value : '2026'
     }
   }, 'تم تسجيل الدخول بنجاح');
 }
@@ -158,11 +206,17 @@ function uploadAvatar(req, res) {
 }
 
 /**
- * التحقق من كلمة مرور المستخدم الحالي (تأكيد أمني للرقابة أو الحركات الحساسة)
+ * Hint: التحقق الأمني الفعلي من كلمة مرور المستخدم الحالي أو السوبر أدمن في قاعدة البيانات
+ * تم إلغاء أي تجاوز ثابت (Hardcoded Bypass) والاعتماد حصرياً على التجزئة المشفرة في القاعدة
  */
 function verifyPassword(req, res) {
   let { password } = req.body;
   const user = req.user;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+
+  if (isRateLimited(`verify_${clientIp}_${user.id}`)) {
+    return errorResponse(res, 'تم تجاوز الحد المسموح لمحاولات التحقق الأمني. يرجى الانتظار قليلاً ثم المحاولة مجدداً', 429);
+  }
 
   if (!password) {
     return errorResponse(res, 'يرجى إدخال كلمة المرور للتأكيد الأمني', 400);
@@ -171,38 +225,27 @@ function verifyPassword(req, res) {
   // تنظيف وتحويل الأرقام العربية الهندية (١٢٣) إلى أرقام إنجليزية (123) تحسباً لاختلاف لغات لوحة المفاتيح
   const cleanPwd = String(password).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 
-  // التحقق الفوري المباشر من كلمة مرور السوبر أدمن الافتراضية أو اسم الحساب
-  if (
-    cleanPwd === 'Admin@123456' ||
-    cleanPwd.toLowerCase() === 'admin@123456' ||
-    cleanPwd === 'admin'
-  ) {
-    return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');
-  }
-
-  // 1. فحص مع المستخدم الحالي
-  const currentUser = db.prepare('SELECT id, password_hash, encrypted_password FROM users WHERE id = ?').get(user.id);
+  // 1. فحص مع المستخدم الحالي في قاعدة البيانات
+  const currentUser = db.prepare('SELECT id, password_hash, encrypted_password FROM users WHERE id = ? AND is_active = 1').get(user.id);
   let isValid = false;
 
   if (currentUser) {
-    // مقارنة التجزئة
     if (currentUser.password_hash && bcrypt.compareSync(cleanPwd, currentUser.password_hash)) {
       isValid = true;
     }
-    // مقارنة مع النسخة المشفرة المحفوظة للسوبر أدمن
     if (!isValid && currentUser.encrypted_password) {
       try {
         const dec = decrypt(currentUser.encrypted_password);
-        if (dec && (dec === cleanPwd || dec.toLowerCase() === cleanPwd.toLowerCase())) {
+        if (dec && dec === cleanPwd) {
           isValid = true;
         }
       } catch (_) {}
     }
   }
 
-  // 2. إذا لم تتطابق، هل تطابق كلمة مرور أي حساب سوبر أدمن في النظام؟
+  // 2. إذا لم تتطابق، فحص مع حسابات السوبر أدمن النشطة في القاعدة
   if (!isValid) {
-    const superAdmins = db.prepare("SELECT id, password_hash, encrypted_password FROM users WHERE role = 'SUPER_ADMIN'").all();
+    const superAdmins = db.prepare("SELECT id, password_hash, encrypted_password FROM users WHERE role = 'SUPER_ADMIN' AND is_active = 1").all();
     for (const sa of superAdmins) {
       if (sa.password_hash && bcrypt.compareSync(cleanPwd, sa.password_hash)) {
         isValid = true;
@@ -211,7 +254,7 @@ function verifyPassword(req, res) {
       if (sa.encrypted_password) {
         try {
           const dec = decrypt(sa.encrypted_password);
-          if (dec && (dec === cleanPwd || dec.toLowerCase() === cleanPwd.toLowerCase())) {
+          if (dec && dec === cleanPwd) {
             isValid = true;
             break;
           }
@@ -221,9 +264,11 @@ function verifyPassword(req, res) {
   }
 
   if (!isValid) {
-    return errorResponse(res, 'كلمة المرور غير صحيحة، يرجى كتابة كلمة مرور السوبر أدمن (Admin@123456)', 403);
+    recordFailedAttempt(`verify_${clientIp}_${user.id}`);
+    return errorResponse(res, 'كلمة المرور غير صحيحة، يرجى إدخال كلمة مرور الحساب المعتمدة', 403);
   }
 
+  clearFailedAttempts(`verify_${clientIp}_${user.id}`);
   return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');
 }
 

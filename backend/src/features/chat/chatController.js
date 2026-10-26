@@ -137,9 +137,20 @@ function getMessages(req, res) {
   const params = [];
 
   if (type === 'GROUP') {
+    // Hint: التحقق الأمني من عضوية المستخدم في المجموعة (ما لم يكن سوبر أدمن)
+    if (user.role !== ROLES.SUPER_ADMIN) {
+      const isMember = db.prepare('SELECT 1 FROM chat_members WHERE channel_id = ? AND user_id = ?').get(targetId, user.id);
+      if (!isMember) {
+        return errorResponse(res, 'غير مصرح لك بالاطلاع على رسائل هذه المجموعة', 403);
+      }
+    }
     query += 'channel_id = ?';
     params.push(targetId);
-  } else if (type === 'SURVEILLANCE' && user.role === ROLES.SUPER_ADMIN && user2Id) {
+  } else if (type === 'SURVEILLANCE') {
+    // Hint: نمط الرقابة محصور بالسوبر أدمن فقط
+    if (user.role !== ROLES.SUPER_ADMIN || !user2Id) {
+      return errorResponse(res, 'غير مصرح لك بالوصول إلى سجل الرقابة الأمنية', 403);
+    }
     query += '((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))';
     params.push(targetId, user2Id, user2Id, targetId);
   } else {
@@ -182,6 +193,13 @@ function sendMessage(req, res) {
   let result;
 
   if (type === 'GROUP') {
+    // Hint: التحقق من أن المرسل عضو في المجموعة أو سوبر أدمن قبل السماح بالإرسال
+    if (user.role !== ROLES.SUPER_ADMIN) {
+      const isMember = db.prepare('SELECT 1 FROM chat_members WHERE channel_id = ? AND user_id = ?').get(targetId, user.id);
+      if (!isMember) {
+        return errorResponse(res, 'غير مصرح لك بإرسال رسائل في هذه المجموعة', 403);
+      }
+    }
     stmt = db.prepare(`
       INSERT INTO chat_messages (channel_id, sender_id, sender_name, message, is_read)
       VALUES (?, ?, ?, ?, 0)

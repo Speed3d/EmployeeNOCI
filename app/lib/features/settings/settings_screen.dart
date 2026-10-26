@@ -574,73 +574,278 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     }
   }
 
-  // تصفير النظام وإعادة الضبط (حصري للسوبر أدمن)
+  /// Hint: تصفير النظام وإعادة الضبط (حصري للسوبر أدمن) مع خيارين:
+  /// 1. factory_default: إعادة الضبط لنقطة البداية الأصلية مع إعادة الموظفين للنسخة الأصلية
+  /// 2. wipe_all: تصفير شامل بالكامل مع حذف الموظفين والأقسام ليصبح النظام فارغاً تماماً
   Future<void> _resetDatabase() async {
     final passwordController = TextEditingController();
+    String selectedResetMode = 'factory_default';
+
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 28),
-            SizedBox(width: 8),
-            Text('تصفير النظام وإعادة الضبط'),
-          ],
-        ),
-        content: SizedBox(
-          width: 450,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
             children: [
-              const Text(
-                'تحذير صارم: هذه العملية ستقوم بحذف كافة سجلات الحضور والانصراف، الأيام المعتمدة، الإجازات، وجداول الدوام وإعادة النظام لنقطة البداية.',
-                style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              const Text('للتأكيد، يرجى إدخال كلمة مرور السوبر أدمن:'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'كلمة المرور *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock_rounded),
-                ),
-              ),
+              Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 28),
+              SizedBox(width: 8),
+              Text('تصفير النظام وإعادة الضبط للبداية'),
             ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تأكيد التصفير النهائي'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                    ),
+                    child: const Text(
+                      'تحذير صارم: سيتم أخذ نسخة احتياطية تلقائية للأمان قبل تنفيذ التصفير. يرجى تحديد نوع التصفير المطلوب بدقة:',
+                      style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 12.5),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // الخيار الأول: إعادة الضبط لنقطة البداية الأصلية
+                  InkWell(
+                    onTap: () => setDialogState(() => selectedResetMode = 'factory_default'),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: selectedResetMode == 'factory_default'
+                            ? AppColors.navy.withValues(alpha: 0.08)
+                            : Colors.grey.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: selectedResetMode == 'factory_default' ? AppColors.navy : Colors.grey.shade300,
+                          width: selectedResetMode == 'factory_default' ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            selectedResetMode == 'factory_default'
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                            color: selectedResetMode == 'factory_default' ? AppColors.navy : Colors.grey,
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '1. إعادة الضبط لنقطة البداية الأصلية (مع إعادة الموظفين للنسخة الأصلية)',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'مسح كافة البصمات، الإجازات، العطل، الجداول، القوالب المضافة، التنقلات، المحادثات، المستخدمين الإضافيين، وسجل الحركات، مع إعادة إعدادات النظام وقائمة الموظفين والأقسام لنسخة الإكسل الأصلية.',
+                                  style: TextStyle(fontSize: 12, color: AppColors.vipExempt),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // الخيار الثاني: تصفير شامل بالكامل مع حذف الموظفين
+                  InkWell(
+                    onTap: () => setDialogState(() => selectedResetMode = 'wipe_all'),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: selectedResetMode == 'wipe_all'
+                            ? AppColors.danger.withValues(alpha: 0.08)
+                            : Colors.grey.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: selectedResetMode == 'wipe_all' ? AppColors.danger : Colors.grey.shade300,
+                          width: selectedResetMode == 'wipe_all' ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            selectedResetMode == 'wipe_all'
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                            color: selectedResetMode == 'wipe_all' ? AppColors.danger : Colors.grey,
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '2. تصفير شامل بالكامل (مع حذف جميع الموظفين والأقسام)',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppColors.danger),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'حذف كل شيء في النظام بما في ذلك جميع أسماء الموظفين والأقسام والمستخدمين الإضافيين والقوالب والإعدادات والسجلات ليصبح النظام فارغاً تماماً (0 موظف).',
+                                  style: TextStyle(fontSize: 12, color: AppColors.vipExempt),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('للتأكيد، يرجى إدخال كلمة مرور السوبر أدمن:', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'كلمة المرور *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد التصفير النهائي'),
+            ),
+          ],
+        ),
       ),
     );
 
     if (confirm != true || passwordController.text.trim().isEmpty) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _isLoading = true);
     try {
       final res = await ApiClient.instance.post('/settings/reset-db', {
         'password': passwordController.text.trim(),
+        'resetMode': selectedResetMode,
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+
+      // Hint: تحديث حالة الهوية والإعدادات في الذاكرة المحلية فوراً لتعكس وضع المصنع
+      AuthProvider.instance.updateBranding(
+        logoUrl: '',
+        institutionName: 'اللجنة الأولمبية الوطنية العراقية (NOCI)',
+        appTitle: 'نظام متابعة حضور وانصراف موظفي المقر',
+      );
+      AuthProvider.instance.updateBanner(null);
+      AuthProvider.instance.setMaintenanceMode(false);
+      await AuthProvider.instance.setActiveYear('2026');
+
+      if (!mounted) return;
+      messenger.showSnackBar(
         SnackBar(
           backgroundColor: AppColors.onTime,
-          content: Text(res['message'] ?? 'تم تصفير النظام وإعادة الضبط بنجاح!'),
+          content: Text(
+            (res is Map && res['message'] != null)
+                ? res['message'].toString()
+                : (selectedResetMode == 'wipe_all'
+                    ? 'تم التصفير الشامل بالكامل وحذف جميع الموظفين والسجلات والإعدادات بنجاح!'
+                    : 'تمت إعادة ضبط النظام لنقطة البداية الأصلية بنجاح!'),
+          ),
+        ),
+      );
+      await _loadSettingsAndUsers();
+      await _loadBackups();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(backgroundColor: AppColors.danger, content: Text('فشل التصفير: $e')),
+      );
+    }
+  }
+
+  /// Hint: الترحيل السنوي وتبديل السنة الإدارية/المالية الفعالة في النظام
+  Future<void> _switchActiveYear() async {
+    final newYear = _activeYearController.text.trim();
+    if (newYear.isEmpty || int.tryParse(newYear) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: AppColors.danger, content: Text('يرجى إدخال سنة صحيحة (مثال: 2026)')),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
+    try {
+      await ApiClient.instance.post('/settings/switch-year', {'year': newYear, 'newYear': newYear});
+      await AuthProvider.instance.setActiveYear(newYear);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم اعتماد السنة المالية/الإدارية النشطة ($newYear) بنجاح!'),
         ),
       );
       _loadSettingsAndUsers();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل تبديل السنة: $e')));
+    }
+  }
+
+  /// Hint: حذف حساب مستخدم من النظام مع التحقق الأمني ومنع حذف الحساب الحالي
+  Future<void> _deleteUser(Map<String, dynamic> targetUser) async {
+    final currentUserId = AuthProvider.instance.user?['id'];
+    if (targetUser['id'] == currentUserId) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: AppColors.danger, content: Text('فشل التصفير: $e')),
+        const SnackBar(backgroundColor: AppColors.danger, content: Text('لا يمكنك حذف حسابك الشخصي الحالي')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد حذف المستخدم'),
+        content: Text('هل أنت متأكد من حذف حساب المستخدم [${targetUser['full_name']} (@${targetUser['username']})] نهائياً؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('نعم، حذف الحساب'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await ApiClient.instance.delete('/settings/users/${targetUser['id']}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم حذف حساب المستخدم بنجاح')),
+      );
+      _loadSettingsAndUsers();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.danger, content: Text('فشل حذف المستخدم: $e')),
       );
     }
   }
@@ -654,6 +859,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     String role = user?['role'] ?? 'DATA_ENTRY';
     bool canManageExclusions = user?['can_manage_exclusions'] == 1;
     bool canRecommit = user?['can_recommit'] == 1;
+    bool isActive = user?['is_active'] != 0;
 
     showDialog(
       context: context,
@@ -710,6 +916,13 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         onChanged: (val) => setModalState(() => canRecommit = val),
                       ),
                     ],
+                    if (isEdit)
+                      SwitchListTile(
+                        title: const Text('حالة الحساب (نشط ومسموح له بالدخول)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        value: isActive,
+                        activeColor: AppColors.onTime,
+                        onChanged: (val) => setModalState(() => isActive = val),
+                      ),
                   ],
                 ),
               ),
@@ -727,6 +940,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         'newPassword': passwordController.text.trim().isNotEmpty ? passwordController.text.trim() : null,
                         'canManageExclusions': canManageExclusions,
                         'canRecommit': canRecommit,
+                        'isActive': isActive,
                       });
                     } else {
                       await ApiClient.instance.post('/settings/users', {
@@ -1048,9 +1262,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                   ),
                                   subtitle: Text(
                                     'الدور: ${isSuper ? 'سوبر أدمن' : 'مدخل بيانات'}' +
+                                        (u['is_active'] == 0 ? ' • [الحساب معطل]' : '') +
                                         (u['can_manage_exclusions'] == 1 ? ' • [صلاحية استثناء]' : '') +
                                         (u['can_recommit'] == 1 ? ' • [صلاحية إعادة الاعتماد]' : ''),
-                                    style: const TextStyle(fontSize: 12),
+                                    style: TextStyle(fontSize: 12, color: u['is_active'] == 0 ? AppColors.danger : null),
                                   ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1066,6 +1281,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                         tooltip: 'تعديل',
                                         onPressed: () => _showUserDialog(u),
                                       ),
+                                      if (u['id'] != auth.user?['id'])
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                          tooltip: 'حذف المستخدم',
+                                          onPressed: () => _deleteUser(u),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -1079,12 +1300,65 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     // تبويب 6: النسخ الاحتياطي والاستعادة
                     _buildBackupRestoreTab(),
 
-                    // تبويب 7: تصفير النظام والصيانة
+                    // تبويب 7: تصفير النظام والصيانة والترحيل السنوي
                     SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // بطاقة الترحيل السنوي والسنة الفعالة
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.calendar_month_rounded, color: AppColors.navy, size: 22),
+                                      SizedBox(width: 8),
+                                      Text('السنة الإدارية / المالية النشطة والترحيل السنوي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'تحدد السنة النشطة أرشيف سجلات الحضور والعطل الرسمية الافتراضية المعروضة في النظام:',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 180,
+                                        child: TextField(
+                                          controller: _activeYearController,
+                                          keyboardType: TextInputType.number,
+                                          decoration: const InputDecoration(
+                                            labelText: 'السنة النشطة (مثال: 2026)',
+                                            border: OutlineInputBorder(),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.navy,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        icon: const Icon(Icons.published_with_changes_rounded, size: 18),
+                                        label: const Text('تحديث واعتماد السنة', style: TextStyle(fontWeight: FontWeight.bold)),
+                                        onPressed: _switchActiveYear,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
                           // بطاقة الصيانة والتعاميم
                           Card(
                             child: Padding(

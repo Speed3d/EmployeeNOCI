@@ -7,9 +7,17 @@ const db = require('../src/core/database');
 const { parseMasterEmployeesFile } = require('../src/tools/excelHelper');
 
 function seedEmployees(force = false) {
+  // Hint: التحقق مما إذا كان السوبر أدمن قد قام بتصفير شامل مع حذف الموظفين عمداً لمنع البذر التلقائي عند التشغيل
+  const wipedSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'employees_wiped_manually'").get();
+  const isWipedManually = wipedSetting && wipedSetting.value === 'true';
+
   const currentCount = db.prepare('SELECT COUNT(*) as count FROM employees').get().count;
-  if (currentCount > 0 && !force && !process.argv.includes('--force')) {
-    console.log(`قاعدة البيانات تحتوي بالفعل على ${currentCount} موظف (تم تخطي إعادة البذر التلقائي).`);
+  if ((currentCount > 0 || isWipedManually) && !force && !process.argv.includes('--force')) {
+    if (isWipedManually && currentCount === 0) {
+      console.log('تم تخطي البذر التلقائي للموظفين (النظام في وضع التصفير الشامل الفارغ).');
+    } else {
+      console.log(`قاعدة البيانات تحتوي بالفعل على ${currentCount} موظف (تم تخطي إعادة البذر التلقائي).`);
+    }
     return;
   }
 

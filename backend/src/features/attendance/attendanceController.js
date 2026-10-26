@@ -7,6 +7,7 @@ const { processAttendanceForDay } = require('./attendanceEngine');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
 const { ROLES } = require('../../shared/constants');
+const { getBaghdadDateStr } = require('../../tools/timeUtils');
 
 /**
  * 1. معاينة كشف البصمة اليومي بدون حفظ في القاعدة (Preview)
@@ -123,9 +124,9 @@ function checkDayStatus(req, res) {
 function getDailyAttendance(req, res) {
   let { date, department, status, search } = req.query;
 
-  // التاريخ الافتراضي: تاريخ الحاسوب الحالي
+  // Hint: التاريخ الافتراضي هو تاريخ اليوم الحالي بتوقيت بغداد
   if (!date) {
-    date = new Date().toISOString().split('T')[0];
+    date = getBaghdadDateStr();
   }
 
   // فحص حالة الاعتماد
@@ -186,13 +187,15 @@ function getDailyAttendance(req, res) {
   const stats = {
     date,
     total: allDayRecords.length,
+    totalEmployees: allDayRecords.length,
     present: allDayRecords.filter(r => ['ON_TIME', 'LATE', 'VERY_LATE', 'EARLY_LEAVE'].includes(r.status)).length,
     onTime: allDayRecords.filter(r => r.status === 'ON_TIME').length,
     late: allDayRecords.filter(r => ['LATE', 'VERY_LATE'].includes(r.status)).length,
     absent: allDayRecords.filter(r => r.status === 'ABSENT').length,
     onLeave: allDayRecords.filter(r => r.status === 'ON_LEAVE').length,
     offDay: allDayRecords.filter(r => r.status === 'OFF_DAY').length,
-    holiday: allDayRecords.filter(r => r.status === 'HOLIDAY').length
+    holiday: allDayRecords.filter(r => r.status === 'HOLIDAY').length,
+    missedPunch: allDayRecords.filter(r => r.status === 'MISSED_PUNCH').length
   };
 
   return successResponse(res, {

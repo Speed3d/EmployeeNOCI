@@ -28,6 +28,7 @@ app/build/
 !.vscode/launch.json
 !.vscode/settings.json
 
-# OS files
+# OS & Office temp files
 .DS_Store
 Thumbs.db
+~$*
