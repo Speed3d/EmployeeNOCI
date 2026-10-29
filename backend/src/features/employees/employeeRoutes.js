@@ -24,6 +24,7 @@ router.put('/departments/:id/exclusion', authenticateToken, employeeController.t
 router.post('/', authenticateToken, requireSuperAdmin, employeeController.createEmployee);
 router.put('/:id', authenticateToken, requireSuperAdmin, employeeController.updateEmployee);
 router.delete('/:id', authenticateToken, requireSuperAdmin, employeeController.deleteEmployee);
+router.post('/:id/restore', authenticateToken, requireSuperAdmin, employeeController.restoreEmployee);
 router.post('/:id/transfer', authenticateToken, requireSuperAdmin, employeeController.transferEmployee);
 router.put('/:id/vip-exempt', authenticateToken, requireSuperAdmin, employeeController.toggleVipExempt);
 router.post('/import-excel', authenticateToken, requireSuperAdmin, upload.single('file'), employeeController.importEmployeesExcel);

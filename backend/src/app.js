@@ -112,6 +112,11 @@ app.use((err, req, res, next) => {
 
 // تشغيل السيرفر
 if (require.main === module) {
+  // Hint: تشغيل النسخ الاحتياطي التلقائي اليومي (يمكن تعطيله بمتغير البيئة NOCI_DISABLE_AUTO_BACKUP=1)
+  if (process.env.NOCI_DISABLE_AUTO_BACKUP !== '1') {
+    require('./core/backupScheduler').startAutoBackups();
+  }
+
   app.listen(PORT, HOST, () => {
     console.log(`=======================================================`);
     console.log(`✔ خادم NOCI Attendance يعمل الآن بنجاح على:`);

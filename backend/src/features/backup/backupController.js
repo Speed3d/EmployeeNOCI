@@ -8,12 +8,10 @@ const Database = require('better-sqlite3');
 const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
+const { BACKUPS_DIR, createBackupFile } = require('../../core/backupScheduler');
 
-// مجلد حفظ النسخ الاحتياطية على السيرفر
-const BACKUPS_DIR = path.join(path.dirname(db.name), 'backups');
-if (!fs.existsSync(BACKUPS_DIR)) {
-  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-}
+// Hint: الجداول التي يجب أن تحتويها أي نسخة احتياطية صالحة لهذا النظام
+const REQUIRED_TABLES = ['users', 'employees', 'attendance_records', 'attendance_days', 'system_settings'];
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -77,38 +75,20 @@ function listBackups(req, res) {
 async function createBackup(req, res) {
   const user = req.user;
   try {
-    const timestamp = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Baghdad',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).format(new Date()).replace(/[/:]/g, '-').replace(', ', '_');
-
-    const filename = `backup_noci_${timestamp}.db`;
-    const destPath = path.join(BACKUPS_DIR, filename);
-
-    // تفريغ سجل التغييرات إلى الملف الرئيسي
-    db.pragma('wal_checkpoint(TRUNCATE)');
-
-    // استخدام محرك النسخ الذاتي فائق السرعة
-    await db.backup(destPath);
-
+    const { filename, destPath, size } = await createBackupFile('backup_noci_');
     const stat = fs.statSync(destPath);
 
-    logAction(user.id, user.full_name, 'إنشاء نسخة احتياطية', `تم إنشاء نسخة احتياطية جديدة: ${filename} بحجم ${formatBytes(stat.size)}`);
+    logAction(user.id, user.full_name, 'إنشاء نسخة احتياطية', `تم إنشاء نسخة احتياطية جديدة: ${filename} بحجم ${formatBytes(size)}`, req.clientIp);
 
     return successResponse(res, {
       filename,
-      sizeBytes: stat.size,
-      sizeFormatted: formatBytes(stat.size),
+      sizeBytes: size,
+      sizeFormatted: formatBytes(size),
       createdAt: formatDate(stat.mtime)
     }, 'تم إنشاء النسخة الاحتياطية بنجاح');
   } catch (err) {
-    return errorResponse(res, `فشل إنشاء النسخة الاحتياطية: ${err.message}`, 500);
+    console.error('فشل إنشاء النسخة الاحتياطية:', err);
+    return errorResponse(res, 'فشل إنشاء النسخة الاحتياطية', 500);
   }
 }
 
@@ -187,20 +167,40 @@ async function restoreBackup(req, res) {
       return errorResponse(res, 'الملف المرفوع ليس ملف قاعدة بيانات SQLite صالح', 400);
     }
 
+    // Hint: التحقق من أن النسخة تخص هذا النظام (تحتوي الجداول الأساسية) وأنها سليمة
+    const probe = new Database(targetPath, { readonly: true });
+    let missing = [];
+    let integrity = 'ok';
+    try {
+      const tables = new Set(probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(t => t.name));
+      missing = REQUIRED_TABLES.filter(t => !tables.has(t));
+      if (missing.length === 0) integrity = probe.pragma('integrity_check', { simple: true });
+    } finally {
+      probe.close();
+    }
+    if (missing.length > 0 || integrity !== 'ok') {
+      if (isUploaded && fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+      return errorResponse(res, missing.length > 0
+        ? `الملف ليس نسخة احتياطية لهذا النظام (جداول مفقودة: ${missing.join('، ')})`
+        : 'ملف النسخة الاحتياطية تالف ولا يمكن استعادته', 400);
+    }
+
     // 1. أخذ نسخة أمان استباقية من قاعدة البيانات الحالية قبل الاستعادة
-    const safetyName = `safety_before_restore_${Date.now()}.db`;
-    const safetyPath = path.join(BACKUPS_DIR, safetyName);
-    db.pragma('wal_checkpoint(TRUNCATE)');
-    await db.backup(safetyPath);
+    const { filename: safetyName } = await createBackupFile('safety_before_restore_');
 
     // 2. تطبيق الاستعادة في قاعدة البيانات الحالية عبر محرك SQLite دون قطع الاتصال
     const sourceDb = new Database(targetPath, { readonly: true });
     await sourceDb.backup(db.name);
     sourceDb.close();
 
+    // Hint: ترقية بنية النسخة المستعادة إلى أحدث إصدار (ترحيلات + بذر الإعدادات الناقصة)
+    db.runMigrations();
+    db.seedDefaultSettings();
+
     // إذا كان ملف مرفوع، نحفظه في مجلد النسخ ليكون متاحاً في الأرشيف
     if (isUploaded) {
-      const archivedName = `restored_${Date.now()}_${path.basename(file.originalname)}`;
+      const baseName = path.basename(file.originalname || 'upload').replace(/\.db$/i, '').replace(/[^\w\u0600-\u06FF.-]/g, '_');
+      const archivedName = `restored_${Date.now()}_${baseName}.db`;
       const archivedPath = path.join(BACKUPS_DIR, archivedName);
       fs.renameSync(targetPath, archivedPath);
     }
@@ -212,12 +212,14 @@ async function restoreBackup(req, res) {
       `تم استعادة قاعدة البيانات بنجاح من: ${isUploaded ? file.originalname : filename} (تم حفظ نسخة أمان: ${safetyName})`
     );
 
-    return successResponse(res, { restored: true }, 'تم استعادة قاعدة البيانات بنجاح تام');
+    return successResponse(res, { restored: true, safetyBackup: safetyName },
+      'تم استعادة قاعدة البيانات بنجاح. ملاحظة: كلمات المرور المحفوظة للكشف في نسخة من تثبيت آخر لن يمكن كشفها لاختلاف مفتاح التشفير');
   } catch (err) {
     if (isUploaded && targetPath && fs.existsSync(targetPath)) {
       try { fs.unlinkSync(targetPath); } catch (_) {}
     }
-    return errorResponse(res, `فشل عملية استعادة النسخة الاحتياطية: ${err.message}`, 500);
+    console.error('فشل استعادة النسخة الاحتياطية:', err);
+    return errorResponse(res, 'فشل عملية استعادة النسخة الاحتياطية', 500);
   }
 }
 

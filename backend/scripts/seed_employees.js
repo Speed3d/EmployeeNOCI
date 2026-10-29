@@ -5,6 +5,7 @@
 const path = require('path');
 const db = require('../src/core/database');
 const { parseMasterEmployeesFile } = require('../src/tools/excelHelper');
+const { importEmployees } = require('../src/features/employees/employeeService');
 
 function seedEmployees(force = false) {
   // Hint: التحقق مما إذا كان السوبر أدمن قد قام بتصفير شامل مع حذف الموظفين عمداً لمنع البذر التلقائي عند التشغيل
@@ -27,37 +28,9 @@ function seedEmployees(force = false) {
   const employees = parseMasterEmployeesFile(excelPath);
   console.log(`تم استخراج ${employees.length} موظف من الملف.`);
 
-  const insertEmpStmt = db.prepare(`
-    INSERT INTO employees (emp_code, name, department, status, is_exempt, exempt_reason)
-    VALUES (@empCode, @name, @department, @status, @isExempt, @exemptReason)
-    ON CONFLICT(emp_code) DO UPDATE SET
-      name = excluded.name,
-      department = excluded.department,
-      status = excluded.status,
-      is_exempt = excluded.is_exempt,
-      exempt_reason = excluded.exempt_reason
-  `);
-
-  const insertDeptStmt = db.prepare(`
-    INSERT OR IGNORE INTO departments (name, is_excluded)
-    VALUES (?, ?)
-  `);
-
-  const insertMany = db.transaction((emps) => {
-    for (const emp of emps) {
-      insertEmpStmt.run(emp);
-
-      // استبعاد الأقسام الخاصة كافتراضي (استقالة، تنسيب، متوفين)
-      let isExcluded = 0;
-      if (emp.status !== 'نشط' || emp.department.includes('استقالة') || emp.department.includes('تنسيب') || emp.department.includes('متوف')) {
-        isExcluded = 1;
-      }
-      insertDeptStmt.run(emp.department, isExcluded);
-    }
-  });
-
-  insertMany(employees);
-  console.log(`✔ تم حفظ وتحديث ${employees.length} موظف في قاعدة البيانات بنجاح!`);
+  // Hint: نفس منطق الاستيراد المستخدم في واجهة النظام (مع استبعاد أقسام الاستقالة والتنسيب والمتوفين افتراضياً)
+  const summary = importEmployees(employees, { markDepartmentsExcluded: true });
+  console.log(`✔ تمت المعالجة: ${summary.added} جديد، ${summary.updated} محدّث، ${summary.unchanged} بلا تغيير.`);
 
   // استعراض ملخص
   const total = db.prepare('SELECT COUNT(*) as count FROM employees').get().count;

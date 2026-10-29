@@ -6,6 +6,12 @@ const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
 const { getBaghdadDateStr, getDayOfWeekFromYmd, addDaysYmd } = require('../../tools/timeUtils');
+const { isYmd, isWorkDaysArray, asTrimmedString, toPositiveInt, badRequest } = require('../../shared/validators');
+
+// Hint: استدعاء متأخر لتفادي الاعتماد الدائري مع محرك الحضور
+function recalcRange(start, end, userId) {
+  return require('../attendance/attendanceEngine').recalculateCommittedRange(start, end, userId);
+}
 
 /**
  * Hint: حساب يوم الأحد لبداية الأسبوع لأي تاريخ محدد دون تأثر بانحراف التوقيت العالمي UTC
@@ -35,12 +41,13 @@ function createTemplate(req, res) {
   const { name, workDays } = req.body;
   const user = req.user;
 
-  if (!name || !Array.isArray(workDays)) {
-    return errorResponse(res, 'اسم القالب وقائمة أيام العمل حقول إلزامية', 400);
+  const cleanName = asTrimmedString(name, 120);
+  if (!cleanName || !isWorkDaysArray(workDays)) {
+    return badRequest(res, 'اسم القالب وقائمة أيام العمل (أرقام من 0 إلى 6) حقول إلزامية');
   }
 
   const stmt = db.prepare('INSERT INTO schedule_templates (name, work_days_json) VALUES (?, ?)');
-  const result = stmt.run(name.trim(), JSON.stringify(workDays));
+  const result = stmt.run(cleanName, JSON.stringify([...workDays].sort()));
 
   logAction(user.id, user.full_name, 'إنشاء قالب دوام', `إنشاء القالب [${name}] بأيام العمل: ${workDays.join(',')}`);
 
@@ -60,8 +67,16 @@ function updateTemplate(req, res) {
     return errorResponse(res, 'القالب غير موجود', 404);
   }
 
-  const updatedName = name ? name.trim() : template.name;
-  const updatedWorkDays = Array.isArray(workDays) ? JSON.stringify(workDays) : template.work_days_json;
+  if (workDays !== undefined && !isWorkDaysArray(workDays)) {
+    return badRequest(res, 'أيام العمل يجب أن تكون أرقاماً من 0 إلى 6 دون تكرار');
+  }
+  if (name !== undefined && !asTrimmedString(name, 120)) {
+    return badRequest(res, 'اسم القالب غير صالح');
+  }
+
+  // Hint: تعديل القالب لا يغير الجداول المعيّنة مسبقاً لأنها تحفظ نسخة من الأيام لحظة التعيين
+  const updatedName = name !== undefined ? asTrimmedString(name, 120) : template.name;
+  const updatedWorkDays = workDays !== undefined ? JSON.stringify([...workDays].sort()) : template.work_days_json;
 
   db.prepare('UPDATE schedule_templates SET name = ?, work_days_json = ? WHERE id = ?').run(updatedName, updatedWorkDays, id);
 
@@ -95,9 +110,10 @@ function deleteTemplate(req, res) {
 function getAssignments(req, res) {
   let { weekStartDate, department } = req.query;
 
-  if (!weekStartDate) {
-    weekStartDate = getWeekSunday(getBaghdadDateStr());
+  if (weekStartDate !== undefined && !isYmd(weekStartDate)) {
+    return badRequest(res, 'تاريخ بداية الأسبوع غير صالح');
   }
+  weekStartDate = getWeekSunday(weekStartDate || getBaghdadDateStr());
 
   // جلب كافة الموظفين النشطين وغير المستبعدين
   let query = `
@@ -110,6 +126,7 @@ function getAssignments(req, res) {
     LEFT JOIN employee_schedules fs ON fs.employee_id = e.id AND fs.schedule_type = 'FIXED'
     WHERE e.status = 'نشط' 
       AND e.is_exempt = 0
+      AND e.deleted_at IS NULL
       AND e.department NOT IN (SELECT name FROM departments WHERE is_excluded = 1)
   `;
   const params = [weekStartDate];
@@ -138,28 +155,24 @@ function getAssignments(req, res) {
     let templateId = null;
     let workDays = defaultWorkDays;
 
+    // Hint: نفس أولوية المحرك: نسخة الأيام المحفوظة أولاً، والقالب للاسم فقط
+    const pick = (tplId, daysJson, type, customName) => {
+      activeType = type;
+      const t = tplId && templateMap.has(tplId) ? templateMap.get(tplId) : null;
+      if (t) {
+        templateName = t.name;
+        templateId = t.id;
+      } else {
+        templateName = customName;
+      }
+      if (daysJson) workDays = JSON.parse(daysJson);
+      else if (t) workDays = t.workDays;
+    };
+
     if (r.weekly_sched_id) {
-      activeType = 'WEEKLY';
-      if (r.weekly_template_id && templateMap.has(r.weekly_template_id)) {
-        const t = templateMap.get(r.weekly_template_id);
-        templateName = t.name;
-        templateId = t.id;
-        workDays = t.workDays;
-      } else if (r.weekly_work_days) {
-        templateName = 'مخصص أسبوعياً';
-        workDays = JSON.parse(r.weekly_work_days);
-      }
+      pick(r.weekly_template_id, r.weekly_work_days, 'WEEKLY', 'مخصص أسبوعياً');
     } else if (r.fixed_sched_id) {
-      activeType = 'FIXED';
-      if (r.fixed_template_id && templateMap.has(r.fixed_template_id)) {
-        const t = templateMap.get(r.fixed_template_id);
-        templateName = t.name;
-        templateId = t.id;
-        workDays = t.workDays;
-      } else if (r.fixed_work_days) {
-        templateName = 'مخصص ثابت';
-        workDays = JSON.parse(r.fixed_work_days);
-      }
+      pick(r.fixed_template_id, r.fixed_work_days, 'FIXED', 'مخصص ثابت');
     }
 
     // حساب أيام الأوف
@@ -195,42 +208,70 @@ function assignSchedule(req, res) {
   const user = req.user;
 
   if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
-    return errorResponse(res, 'يرجى اختيار موظف واحد على الأقل', 400);
+    return badRequest(res, 'يرجى اختيار موظف واحد على الأقل');
+  }
+  const ids = employeeIds.map(toPositiveInt);
+  if (ids.some(id => id === null)) {
+    return badRequest(res, 'قائمة الموظفين تحتوي معرفات غير صالحة');
   }
 
   const type = scheduleType === 'WEEKLY' ? 'WEEKLY' : 'FIXED';
-  const targetWeek = type === 'WEEKLY' ? (weekStartDate || getWeekSunday(getBaghdadDateStr())) : null;
-  const workDaysJson = Array.isArray(workDays) ? JSON.stringify(workDays) : null;
+  if (weekStartDate !== undefined && weekStartDate !== null && !isYmd(weekStartDate)) {
+    return badRequest(res, 'تاريخ بداية الأسبوع غير صالح');
+  }
+  // Hint: تطبيع بداية الأسبوع إلى يوم الأحد دائماً حتى يطابق بحث المحرك
+  const targetWeek = type === 'WEEKLY' ? getWeekSunday(weekStartDate || getBaghdadDateStr()) : null;
 
-  const deleteWeeklyStmt = db.prepare('DELETE FROM employee_schedules WHERE employee_id = ? AND schedule_type = \'WEEKLY\' AND week_start_date = ?');
-  const deleteFixedStmt = db.prepare('DELETE FROM employee_schedules WHERE employee_id = ? AND schedule_type = \'FIXED\'');
+  // Hint: حفظ نسخة من أيام العمل دائماً (من القالب أو التخصيص) ليبقى التاريخ ثابتاً عند تعديل القوالب
+  let resolvedDays = null;
+  let resolvedTemplateId = null;
+  if (templateId !== undefined && templateId !== null) {
+    resolvedTemplateId = toPositiveInt(templateId);
+    const tpl = resolvedTemplateId && db.prepare('SELECT work_days_json FROM schedule_templates WHERE id = ?').get(resolvedTemplateId);
+    if (!tpl) return badRequest(res, 'قالب الدوام المحدد غير موجود');
+    resolvedDays = JSON.parse(tpl.work_days_json);
+  } else if (isWorkDaysArray(workDays)) {
+    resolvedDays = [...workDays].sort();
+  } else {
+    return badRequest(res, 'يرجى اختيار قالب دوام أو تحديد أيام العمل (أرقام من 0 إلى 6)');
+  }
+  const workDaysJson = JSON.stringify(resolvedDays);
+
+  const deleteWeeklyStmt = db.prepare("DELETE FROM employee_schedules WHERE employee_id = ? AND schedule_type = 'WEEKLY' AND week_start_date = ?");
+  const deleteFixedStmt = db.prepare("DELETE FROM employee_schedules WHERE employee_id = ? AND schedule_type = 'FIXED'");
   const insertStmt = db.prepare(`
     INSERT INTO employee_schedules (employee_id, schedule_type, template_id, week_start_date, work_days_json)
     VALUES (?, ?, ?, ?, ?)
   `);
 
-  const tx = db.transaction(() => {
-    for (const empId of employeeIds) {
+  db.transaction(() => {
+    for (const empId of ids) {
       if (type === 'WEEKLY') {
         deleteWeeklyStmt.run(empId, targetWeek);
-        insertStmt.run(empId, 'WEEKLY', templateId || null, targetWeek, workDaysJson);
+        insertStmt.run(empId, 'WEEKLY', resolvedTemplateId, targetWeek, workDaysJson);
       } else {
         deleteFixedStmt.run(empId);
-        insertStmt.run(empId, 'FIXED', templateId || null, null, workDaysJson);
+        insertStmt.run(empId, 'FIXED', resolvedTemplateId, null, workDaysJson);
       }
     }
-  });
+  })();
 
-  tx();
+  // Hint: إعادة احتساب الأيام المعتمدة المتأثرة (أسبوع الجدول الأسبوعي، أو كل الأيام للجدول الثابت)
+  const recalculatedDays = type === 'WEEKLY'
+    ? recalcRange(targetWeek, addDaysYmd(targetWeek, 6), user.id)
+    : recalcRange('0000-01-01', '9999-12-31', user.id);
 
   logAction(
     user.id,
     user.full_name,
     'تعيين جدول دوام',
-    `تعيين جدول [${type}] لـ ${employeeIds.length} موظف` + (targetWeek ? ` لأسبوع ${targetWeek}` : '')
+    `تعيين جدول [${type}] لـ ${ids.length} موظف` + (targetWeek ? ` لأسبوع ${targetWeek}` : '') + ` (أُعيد احتساب ${recalculatedDays} يوم معتمد)`,
+    req.clientIp
   );
 
-  return successResponse(res, null, 'تم تعيين جدول الدوام بنجاح');
+  return successResponse(res, { recalculatedDays }, recalculatedDays > 0
+    ? `تم تعيين جدول الدوام وإعادة احتساب ${recalculatedDays} يوم معتمد متأثر`
+    : 'تم تعيين جدول الدوام بنجاح');
 }
 
 /**
@@ -240,12 +281,13 @@ function copyPreviousWeek(req, res) {
   const { targetWeekStartDate } = req.body;
   const user = req.user;
 
-  if (!targetWeekStartDate) {
-    return errorResponse(res, 'يرجى تحديد تاريخ بداية الأسبوع المستهدف', 400);
+  if (!isYmd(targetWeekStartDate)) {
+    return badRequest(res, 'يرجى تحديد تاريخ بداية الأسبوع المستهدف بصيغة صالحة');
   }
 
-  // Hint: حساب الأسبوع السابق (قبل 7 أيام) بدقة دون انزلاق التاريخ بسبب فرق التوقيت
-  const prevWeekStartDate = addDaysYmd(targetWeekStartDate, -7);
+  // Hint: تطبيع الأسبوع المستهدف إلى الأحد ثم حساب الأسبوع السابق (قبل 7 أيام)
+  const targetWeek = getWeekSunday(targetWeekStartDate);
+  const prevWeekStartDate = addDaysYmd(targetWeek, -7);
 
   // جلب كافة جداول الأسبوع السابق
   const prevSchedules = db.prepare(`
@@ -265,25 +307,29 @@ function copyPreviousWeek(req, res) {
   `);
 
   const tx = db.transaction(() => {
-    deleteTargetStmt.run(targetWeekStartDate);
+    deleteTargetStmt.run(targetWeek);
     for (const s of prevSchedules) {
-      insertStmt.run(s.employee_id, s.template_id, targetWeekStartDate, s.work_days_json);
+      insertStmt.run(s.employee_id, s.template_id, targetWeek, s.work_days_json);
     }
   });
 
   tx();
 
+  const recalculatedDays = recalcRange(targetWeek, addDaysYmd(targetWeek, 6), user.id);
+
   logAction(
     user.id,
     user.full_name,
     'نسخ جدول أسبوعي',
-    `نسخ جدول الأسبوع السابق (${prevWeekStartDate}) إلى الأسبوع الجديد (${targetWeekStartDate}) لـ ${prevSchedules.length} موظف`
+    `نسخ جدول الأسبوع السابق (${prevWeekStartDate}) إلى الأسبوع الجديد (${targetWeek}) لـ ${prevSchedules.length} موظف`,
+    req.clientIp
   );
 
   return successResponse(res, {
     copiedCount: prevSchedules.length,
     fromWeek: prevWeekStartDate,
-    toWeek: targetWeekStartDate
+    toWeek: targetWeek,
+    recalculatedDays
   }, `تم نسخ جدول الأسبوع السابق بنجاح (${prevSchedules.length} موظف)`);
 }
 

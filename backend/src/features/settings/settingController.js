@@ -10,7 +10,7 @@ const { successResponse, errorResponse } = require('../../shared/responseHelper'
 const { encrypt, decrypt } = require('../../core/cryptoHelper');
 const { ROLES } = require('../../shared/constants');
 const { DB_PATH } = require('../../core/config');
-const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
+const { createBackupFile } = require('../../core/backupScheduler');
 const seedEmployees = require('../../../scripts/seed_employees');
 
 // Hint: دالة مساعدة لتحويل الأرقام العربية/الفارسية إلى إنجليزية عند إدخال كلمة المرور
@@ -266,18 +266,12 @@ async function resetDatabase(req, res) {
     return errorResponse(res, 'كلمة المرور غير صحيحة، تم إلغاء عملية التصفير لأسباب أمنية', 403);
   }
 
-  // Hint: أخذ نسخة احتياطية تلقائية للأمان قبل تنفيذ التصفير الشامل
+  // Hint: نسخة أمان إلزامية قبل التصفير؛ إذا فشلت يُلغى التصفير بالكامل حفاظاً على البيانات
   try {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    }
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-    const autoBackupPath = path.join(BACKUP_DIR, `pre_reset_safety_${stamp}.db`);
-    await db.backup(autoBackupPath);
+    await createBackupFile('pre_reset_safety_');
   } catch (backupErr) {
-    console.warn('تعذر أخذ نسخة الأمان التلقائية قبل التصفير:', backupErr.message);
+    console.error('تعذر أخذ نسخة الأمان قبل التصفير:', backupErr);
+    return errorResponse(res, 'تعذر إنشاء نسخة الأمان الإلزامية قبل التصفير، لذلك تم إلغاء العملية دون أي تغيير', 500);
   }
 
   const isWipeAll = resetMode === 'wipe_all';

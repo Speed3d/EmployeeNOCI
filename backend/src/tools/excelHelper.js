@@ -3,6 +3,7 @@
  * تقرأ كشوفات البصمة وقوائم الموظفين وتنظف البيانات من الرموز والشوائب
  */
 const xlsx = require('xlsx');
+const { httpError } = require('../shared/responseHelper');
 
 /**
  * تنظيف معرف الموظف (إزالة علامات الاقتباس، الفراغات، والتحويل لنص نقي)
@@ -24,17 +25,16 @@ function cleanText(rawText) {
  * Hint: قراءة ملف الموظفين الأساسي مع تحويل الخلايا الرقمية والنصية بدقة
  */
 function parseMasterEmployeesFile(filePathOrBuffer) {
-  const wb = typeof filePathOrBuffer === 'string' 
-    ? xlsx.readFile(filePathOrBuffer, { cellDates: true }) 
-    : xlsx.read(filePathOrBuffer, { type: 'buffer', cellDates: true });
-  
+  const wb = readWorkbook(filePathOrBuffer);
+
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
+  if (!sheet) throw httpError(400, 'الملف فارغ أو لا يحتوي على صفوف بيانات');
   // Hint: استخدام raw: false لضمان تحويل كافة الحقول والأكواد إلى نصوص مقروءة
   const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
 
   if (!rawRows || rawRows.length < 2) {
-    throw new Error('الملف فارغ أو لا يحتوي على صفوف بيانات');
+    throw httpError(400, 'الملف فارغ أو لا يحتوي على صفوف بيانات');
   }
 
   // البحث عن أعمدة: المعرف، الاسم، القسم
@@ -102,18 +102,50 @@ function parseMasterEmployeesFile(filePathOrBuffer) {
 /**
  * Hint: قراءة وتحليل ملف كشف البصمة اليومي مع دعم التواريخ النصية وتواريخ Excel الرقمية (Serial Dates)
  */
+// Hint: الطابع الزمني المقبول لحركة البصمة: YYYY-MM-DD HH:MM أو YYYY-MM-DD HH:MM:SS
+const PUNCH_TS_RE = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+
+/**
+ * Hint: توحيد الطابع الزمني إلى YYYY-MM-DD HH:MM:SS، أو null إن كان غير صالح
+ */
+function normalizePunchTimestamp(value) {
+  const m = PUNCH_TS_RE.exec(String(value || '').trim());
+  if (!m) return null;
+  const [, date, hh, mm, ss = '00'] = m;
+  const h = Number(hh);
+  const mi = Number(mm);
+  const s = Number(ss);
+  if (h > 23 || mi > 59 || s > 59) return null;
+  const [y, mo, d] = date.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return `${date} ${String(h).padStart(2, '0')}:${mm}:${String(s).padStart(2, '0')}`;
+}
+
+function readWorkbook(filePathOrBuffer) {
+  try {
+    return typeof filePathOrBuffer === 'string'
+      ? xlsx.readFile(filePathOrBuffer, { cellDates: true })
+      : xlsx.read(filePathOrBuffer, { type: 'buffer', cellDates: true });
+  } catch (_) {
+    throw httpError(400, 'تعذر قراءة الملف، تأكد أنه ملف إكسل صالح');
+  }
+}
+
+/**
+ * Hint: قراءة ملف البصمة وتقسيم الحركات حسب اليوم ثم حسب الموظف
+ * يرجع { days: [{ date, employees }], invalidRows, totalPunchRows }
+ */
 function parseDailyAttendanceFile(filePathOrBuffer) {
-  const wb = typeof filePathOrBuffer === 'string' 
-    ? xlsx.readFile(filePathOrBuffer, { cellDates: true }) 
-    : xlsx.read(filePathOrBuffer, { type: 'buffer', cellDates: true });
-  
+  const wb = readWorkbook(filePathOrBuffer);
+
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
   // Hint: تمرير raw: false و dateNF لضمان تنسيق خلايا الوقت الرقمية بصيغة قياسية موحدة
-  const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
+  const rawRows = sheet ? xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' }) : [];
 
   if (!rawRows || rawRows.length < 2) {
-    throw new Error('ملف البصمة فارغ أو لا يحتوي على حركات');
+    throw httpError(400, 'ملف البصمة فارغ أو لا يحتوي على حركات');
   }
 
   // البحث عن أعمدة المعرف والاسم والقسم والوقت
@@ -132,7 +164,7 @@ function parseDailyAttendanceFile(filePathOrBuffer) {
   }
 
   const rawPunches = [];
-  let detectedDate = null;
+  let invalidRows = 0;
 
   for (let i = 1; i < rawRows.length; i++) {
     const r = rawRows[i];
@@ -143,36 +175,54 @@ function parseDailyAttendanceFile(filePathOrBuffer) {
     const dept = cleanText(r[deptCol]);
     const timeVal = cleanText(r[timeCol]);
 
-    if (empCode && timeVal) {
-      // استخراج التاريخ مثل "2026-10-20" من "2026-10-20 09:18:41"
-      if (!detectedDate && timeVal.includes(' ')) {
-        detectedDate = timeVal.split(' ')[0];
-      }
+    if (!empCode && !timeVal) continue;
 
-      rawPunches.push({
-        empCode,
-        name,
-        department: dept,
-        timestamp: timeVal
-      });
+    const timestamp = normalizePunchTimestamp(timeVal);
+    if (!empCode || !timestamp) {
+      invalidRows++;
+      continue;
     }
+
+    rawPunches.push({
+      empCode,
+      name,
+      department: dept,
+      date: timestamp.slice(0, 10),
+      timestamp
+    });
   }
 
-  // تجميع البصمات لكل موظف وعزل البصمات المتتالية في ثوانٍ
-  const punchesByEmp = {};
+  if (rawPunches.length === 0) {
+    throw httpError(400, 'لم يتم العثور على حركات بصمة صالحة في الملف (الصيغة المتوقعة للوقت: YYYY-MM-DD HH:MM:SS)');
+  }
+
+  // تجميع البصمات حسب اليوم ثم حسب الموظف
+  const byDate = new Map();
   for (const p of rawPunches) {
+    if (!byDate.has(p.date)) byDate.set(p.date, {});
+    const punchesByEmp = byDate.get(p.date);
     if (!punchesByEmp[p.empCode]) {
-      punchesByEmp[p.empCode] = {
-        empCode: p.empCode,
-        name: p.name,
-        department: p.department,
-        punches: []
-      };
+      punchesByEmp[p.empCode] = { empCode: p.empCode, name: p.name, department: p.department, punches: [] };
     }
     punchesByEmp[p.empCode].punches.push(p.timestamp);
   }
 
-  // فرز وتنقية حركات كل موظف
+  const days = [...byDate.keys()].sort().map(date => ({
+    date,
+    employees: groupEmployeePunches(byDate.get(date))
+  }));
+
+  return {
+    days,
+    invalidRows,
+    totalPunchRows: rawPunches.length
+  };
+}
+
+/**
+ * Hint: فرز حركات كل موظف وتنقية البصمات المكررة في نفس الدقيقة (Double Tap)
+ */
+function groupEmployeePunches(punchesByEmp) {
   const processedEmployees = [];
   for (const code of Object.keys(punchesByEmp)) {
     const item = punchesByEmp[code];
@@ -207,17 +257,13 @@ function parseDailyAttendanceFile(filePathOrBuffer) {
     });
   }
 
-  return {
-    detectedDate,
-    totalPunchRows: rawPunches.length,
-    uniqueEmployeesCount: processedEmployees.length,
-    employees: processedEmployees
-  };
+  return processedEmployees;
 }
 
 module.exports = {
   cleanEmpCode,
   cleanText,
   parseMasterEmployeesFile,
-  parseDailyAttendanceFile
+  parseDailyAttendanceFile,
+  normalizePunchTimestamp
 };
