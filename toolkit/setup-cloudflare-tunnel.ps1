@@ -25,9 +25,21 @@ $cfCmd = Get-Command cloudflared -ErrorAction SilentlyContinue
 
 if (-not $cfCmd) {
     Write-Host "  - تحميل وتثبيت cloudflared..." -ForegroundColor Yellow
-    $msi = "$env:TEMP\cloudflared.msi"
-    Invoke-WebRequest -UseBasicParsing -OutFile $msi -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.msi"
-    Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn" -Wait
+    # Hint: الطريقة المفضلة عبر winget (حزمة رسمية موقّعة)، والتنزيل المباشر بديل احتياطي مع فحص التوقيع الرقمي
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        winget install --id Cloudflare.cloudflared --exact --accept-source-agreements --accept-package-agreements
+    } else {
+        $msi = "$env:TEMP\cloudflared.msi"
+        Invoke-WebRequest -UseBasicParsing -OutFile $msi -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.msi"
+        $sig = Get-AuthenticodeSignature $msi
+        if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Cloudflare') {
+            Write-Host "✖ توقيع ملف التثبيت غير صالح، تم إيقاف التثبيت لأسباب أمنية" -ForegroundColor Red
+            Remove-Item $msi -Force
+            exit 1
+        }
+        Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn" -Wait
+    }
     $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
 }
 Write-Host "✔ أداة cloudflared جاهزة: $(cloudflared --version)" -ForegroundColor Green

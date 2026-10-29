@@ -11,6 +11,7 @@ process.env.DB_PATH = path.join(tmpRoot, 'test.db');
 process.env.KEYS_DIR = path.join(tmpRoot, 'keys');
 process.env.UPLOADS_DIR = path.join(tmpRoot, 'uploads');
 process.env.NOCI_DISABLE_AUTO_BACKUP = '1';
+process.env.NOCI_INITIAL_ADMIN_PASSWORD = 'Admin@123456';
 
 const xlsx = require('xlsx');
 const app = require('../src/app');

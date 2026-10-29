@@ -4,6 +4,7 @@
  */
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { DB_PATH } = require('./config');
@@ -443,21 +444,29 @@ function seedScheduleTemplates() {
 
 // Hint: بذر وتحديث حساب السوبر أدمن الافتراضي
 function seedDefaultAdmin() {
-  const defaultPlainPassword = 'Admin@123456';
+  // Hint: كلمة المرور الافتراضية للنسخ القديمة (تُستخدم فقط لترقية الحسابات القديمة أدناه)
+  const legacyDefaultPassword = 'Admin@123456';
   const adminUser = db.prepare("SELECT * FROM users WHERE username = 'admin'").get();
 
   if (!adminUser) {
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(defaultPlainPassword, salt);
-    const encrypted = encrypt(defaultPlainPassword);
+    // Hint: كلمة مرور مؤقتة عشوائية لكل تثبيت جديد (أو من NOCI_INITIAL_ADMIN_PASSWORD)، ويُلزم بتغييرها عند أول دخول
+    const initialPassword = process.env.NOCI_INITIAL_ADMIN_PASSWORD || `Noci${crypto.randomBytes(5).toString('hex')}7`;
+    const hash = bcrypt.hashSync(initialPassword, 10);
+    const encrypted = encrypt(initialPassword);
 
     db.prepare(`
       INSERT INTO users (username, password_hash, encrypted_password, full_name, role, can_manage_exclusions, can_recommit, is_active, must_change_password)
       VALUES (?, ?, ?, ?, 'SUPER_ADMIN', 1, 1, 1, 1)
     `).run('admin', hash, encrypted, 'مدير النظام (سوبر أدمن)');
-    console.log('✔ تم إنشاء حساب السوبر أدمن الافتراضي (admin) بكلمة مرور مؤقتة يجب تغييرها عند أول دخول');
+    console.log('=======================================================');
+    console.log('✔ تم إنشاء حساب السوبر أدمن الأول');
+    console.log(`  اسم المستخدم: admin`);
+    console.log(`  كلمة المرور المؤقتة: ${initialPassword}`);
+    console.log('  (سيُطلب تغييرها فوراً عند أول دخول)');
+    console.log('=======================================================');
   } else {
-    // Hint: تحديث كلمة المرور المشفرة فقط إذا لم تكن مسجلة وكانت كلمة المرور الحالية مطابقة للافتراضية
+    // Hint: تحديث كلمة المرور المشفرة فقط إذا لم تكن مسجلة وكانت كلمة المرور الحالية مطابقة للافتراضية القديمة
+    const defaultPlainPassword = legacyDefaultPassword;
     if (!adminUser.encrypted_password && bcrypt.compareSync(defaultPlainPassword, adminUser.password_hash)) {
       const encrypted = encrypt(defaultPlainPassword);
       db.prepare(`
