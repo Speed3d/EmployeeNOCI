@@ -282,7 +282,110 @@ function initDatabase() {
   // بذر الإعدادات الافتراضية والقوالب وحساب السوبر أدمن
   seedDefaultSettings();
   seedScheduleTemplates();
+
+  // تطبيق الترحيلات المرقمة بعد اكتمال البنية الأساسية
+  runMigrations();
+
   seedDefaultAdmin();
+}
+
+/**
+ * Hint: الترحيلات المرقمة (Schema Migrations)
+ * كل ترحيل يُنفذ مرة واحدة فقط داخل معاملة، ويُسجل رقمه في جدول schema_migrations
+ */
+const MIGRATIONS = [
+  {
+    version: 1,
+    name: 'users: token_version, must_change_password, deleted_at',
+    up() {
+      if (!columnExists('users', 'token_version')) db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;');
+      if (!columnExists('users', 'must_change_password')) db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;');
+      if (!columnExists('users', 'deleted_at')) db.exec('ALTER TABLE users ADD COLUMN deleted_at TEXT;');
+    }
+  },
+  {
+    version: 2,
+    name: 'employees: deleted_at (soft delete)',
+    up() {
+      if (!columnExists('employees', 'deleted_at')) db.exec('ALTER TABLE employees ADD COLUMN deleted_at TEXT;');
+    }
+  },
+  {
+    version: 3,
+    name: 'leaves: start_time, end_time (hourly leave)',
+    up() {
+      if (!columnExists('leaves', 'start_time')) db.exec('ALTER TABLE leaves ADD COLUMN start_time TEXT;');
+      if (!columnExists('leaves', 'end_time')) db.exec('ALTER TABLE leaves ADD COLUMN end_time TEXT;');
+    }
+  },
+  {
+    version: 4,
+    name: 'attendance_days: rules_json snapshot',
+    up() {
+      if (!columnExists('attendance_days', 'rules_json')) db.exec('ALTER TABLE attendance_days ADD COLUMN rules_json TEXT;');
+    }
+  },
+  {
+    version: 5,
+    name: 'attendance_previews table',
+    up() {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS attendance_previews (
+          id TEXT PRIMARY KEY,
+          created_by INTEGER,
+          file_name TEXT,
+          file_sha256 TEXT,
+          days_json TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
+  },
+  {
+    version: 6,
+    name: 'attendance_records: year derived from date',
+    up() {
+      db.exec('UPDATE attendance_records SET year = CAST(substr(date, 1, 4) AS INTEGER);');
+    }
+  },
+  {
+    version: 7,
+    name: 'employee_schedules: snapshot template work days',
+    up() {
+      db.exec(`
+        UPDATE employee_schedules
+        SET work_days_json = (SELECT st.work_days_json FROM schedule_templates st WHERE st.id = employee_schedules.template_id)
+        WHERE work_days_json IS NULL AND template_id IS NOT NULL;
+      `);
+    }
+  },
+  {
+    version: 8,
+    name: 'setting: single_punch_exit_threshold',
+    up() {
+      db.prepare(`INSERT OR IGNORE INTO system_settings (key, value, description) VALUES (?, ?, ?)`)
+        .run('single_punch_exit_threshold', '12:30', 'البصمة المنفردة بعد هذا الوقت تُعامل كبصمة خروج');
+    }
+  }
+];
+
+function runMigrations() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT,
+      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  const applied = new Set(db.prepare('SELECT version FROM schema_migrations').all().map(r => r.version));
+  for (const m of MIGRATIONS) {
+    if (applied.has(m.version)) continue;
+    db.transaction(() => {
+      m.up();
+      db.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(m.version, m.name);
+    })();
+    console.log(`✔ تم تطبيق الترحيل رقم ${m.version}: ${m.name}`);
+  }
 }
 
 // Hint: بذر الإعدادات الافتراضية للنظام
@@ -301,6 +404,7 @@ function seedDefaultSettings() {
     { key: 'announcement_banner_active', value: 'false', description: 'حالة إظهار شريط التنبيهات العلوي' },
     { key: 'maintenance_mode', value: 'false', description: 'وضع الصيانة لإيقاف دخول المستخدمين العاديين' },
     { key: 'active_year', value: '2026', description: 'السنة المالية/الإدارية النشطة حالياً' },
+    { key: 'single_punch_exit_threshold', value: '12:30', description: 'البصمة المنفردة بعد هذا الوقت تُعامل كبصمة خروج' },
     { key: 'color_active_leave', value: '#E3F2FD', description: 'لون بطاقات وخلايا الموظف المجاز حالياً' },
     { key: 'color_seconded', value: '#FFE0B2', description: 'لون بطاقات وخلايا موظفي التنسيب' },
     { key: 'color_terminated', value: '#FFCDD2', description: 'لون بطاقات وخلايا الموظف المنتهي خدماته أو المستقيل أو المتوفى' },
@@ -348,10 +452,10 @@ function seedDefaultAdmin() {
     const encrypted = encrypt(defaultPlainPassword);
 
     db.prepare(`
-      INSERT INTO users (username, password_hash, encrypted_password, full_name, role, can_manage_exclusions, can_recommit, is_active)
-      VALUES (?, ?, ?, ?, 'SUPER_ADMIN', 1, 1, 1)
+      INSERT INTO users (username, password_hash, encrypted_password, full_name, role, can_manage_exclusions, can_recommit, is_active, must_change_password)
+      VALUES (?, ?, ?, ?, 'SUPER_ADMIN', 1, 1, 1, 1)
     `).run('admin', hash, encrypted, 'مدير النظام (سوبر أدمن)');
-    console.log('✔ تم إنشاء حساب السوبر أدمن الافتراضي: (admin / Admin@123456)');
+    console.log('✔ تم إنشاء حساب السوبر أدمن الافتراضي (admin) بكلمة مرور مؤقتة يجب تغييرها عند أول دخول');
   } else {
     // Hint: تحديث كلمة المرور المشفرة فقط إذا لم تكن مسجلة وكانت كلمة المرور الحالية مطابقة للافتراضية
     if (!adminUser.encrypted_password && bcrypt.compareSync(defaultPlainPassword, adminUser.password_hash)) {
@@ -372,5 +476,7 @@ initDatabase();
 db.seedDefaultSettings = seedDefaultSettings;
 db.seedScheduleTemplates = seedScheduleTemplates;
 db.seedDefaultAdmin = seedDefaultAdmin;
+db.runMigrations = runMigrations;
+db.columnExists = columnExists;
 
 module.exports = db;

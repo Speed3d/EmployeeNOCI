@@ -9,6 +9,7 @@ const fs = require('fs');
 const authController = require('./authController');
 const { authenticateToken } = require('../../core/authMiddleware');
 const { UPLOADS_DIR } = require('../../core/config');
+const { httpError } = require('../../shared/responseHelper');
 
 // إعداد مجلد تخزين الصور الشخصية
 const avatarsDir = path.join(UPLOADS_DIR, 'avatars');
@@ -34,7 +35,7 @@ const uploadAvatar = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname || '').toLowerCase();
     if (!ALLOWED_IMAGE_EXTS.has(ext)) {
-      return cb(new Error('يُسمح فقط برفع ملفات الصور (PNG, JPG, WEBP, GIF)'));
+      return cb(httpError(400, 'يُسمح فقط برفع ملفات الصور (PNG, JPG, WEBP, GIF)'));
     }
     cb(null, true);
   }

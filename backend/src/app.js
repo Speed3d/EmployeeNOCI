@@ -7,7 +7,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-const { PORT, UPLOADS_DIR } = require('./core/config');
+const { PORT, HOST, UPLOADS_DIR } = require('./core/config');
 const db = require('./core/database');
 
 // استيراد المسارات المقسمة حسب الميزات (Features)
@@ -91,17 +91,28 @@ if (fs.existsSync(webBuildPath)) {
 
 // 4. معالج الأخطاء العام
 app.use((err, req, res, next) => {
-  console.error('خطأ غير معالج في الخادم:', err);
-  res.status(500).json({
-    success: false,
-    message: 'حدث خطأ داخلي في الخادم',
-    error: err.message
-  });
+  // Hint: أخطاء multer (حجم الملف أو امتداد مرفوض) تُعامل كخطأ في الطلب لا كعطل في الخادم
+  if (err && err.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'حجم الملف أكبر من الحد المسموح' : 'تعذر رفع الملف';
+    return res.status(400).json({ success: false, message });
+  }
+
+  // Hint: احترام رمز الحالة المحدد في الخطأ (مثل JSON مكسور = 400)
+  const status = Number(err && (err.status || err.statusCode)) || 500;
+  if (status >= 500) {
+    console.error('خطأ غير معالج في الخادم:', err);
+    return res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' });
+  }
+
+  const message = err.type === 'entity.parse.failed'
+    ? 'صيغة البيانات المرسلة غير صالحة'
+    : (err.expose !== false && err.message ? err.message : 'طلب غير صالح');
+  return res.status(status).json({ success: false, message });
 });
 
 // تشغيل السيرفر
 if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, HOST, () => {
     console.log(`=======================================================`);
     console.log(`✔ خادم NOCI Attendance يعمل الآن بنجاح على:`);
     console.log(`  - محلياً: http://localhost:${PORT}`);

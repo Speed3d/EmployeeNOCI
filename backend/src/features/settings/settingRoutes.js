@@ -9,6 +9,7 @@ const fs = require('fs');
 const settingController = require('./settingController');
 const { authenticateToken, requireSuperAdmin } = require('../../core/authMiddleware');
 const { UPLOADS_DIR } = require('../../core/config');
+const { httpError } = require('../../shared/responseHelper');
 
 // إعداد مجلد تخزين الشعار
 const brandingDir = path.join(UPLOADS_DIR, 'branding');
@@ -33,7 +34,7 @@ const uploadLogo = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname || '').toLowerCase();
     if (!ALLOWED_LOGO_EXTS.has(ext)) {
-      return cb(new Error('يُسمح فقط برفع ملفات الصور للشعار (PNG, JPG, WEBP, GIF)'));
+      return cb(httpError(400, 'يُسمح فقط برفع ملفات الصور للشعار (PNG, JPG, WEBP, GIF)'));
     }
     cb(null, true);
   }

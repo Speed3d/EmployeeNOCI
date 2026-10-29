@@ -21,7 +21,16 @@ function errorResponse(res, message = 'حدث خطأ في معالجة الطل�
   });
 }
 
+// Hint: إنشاء خطأ يحمل رمز حالة HTTP ليعالجه معالج الأخطاء العام بشكل صحيح
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  err.expose = true;
+  return err;
+}
+
 module.exports = {
   successResponse,
-  errorResponse
+  errorResponse,
+  httpError
 };

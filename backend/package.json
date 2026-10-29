@@ -1,12 +1,14 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "NOCI Employee Attendance API (Express + SQLite)",
+  "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
+    "start:supervised": "node scripts/run-forever.js",
     "seed": "node scripts/seed_employees.js",
-    "test": "node scripts/test_engine.js"
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "engine-demo": "node scripts/test_engine.js"
   },
   "keywords": [],
   "author": "",
@@ -21,5 +23,9 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "xlsx": "^0.18.5"
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true
 }
