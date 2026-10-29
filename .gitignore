@@ -34,3 +34,6 @@ app/build/
 .DS_Store
 Thumbs.db
 ~$*
+
+# ملفات الإصدارات المبنية (تُوزَّع خارج git)
+/releases/

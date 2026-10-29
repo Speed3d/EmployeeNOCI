@@ -5,7 +5,7 @@ import 'theme.dart';
 class AppConstants {
   static const String appTitle = 'نظام متابعة حضور وانصراف الموظفين';
   static const String institutionName = 'اللجنة الأولمبية الوطنية العراقية (NOCI)';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '2.0.0';
 
   /// Hint: عنوان الـ API الأساسي (يمكن تغييره عند الربط بالنفق أو بالدومين)
   /// على الويب يستخدم نفس الدومين تلقائياً إذا كان المسار نسبياً، أو localhost في التطوير
