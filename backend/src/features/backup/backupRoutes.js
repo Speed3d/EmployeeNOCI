@@ -7,7 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const backupController = require('./backupController');
-const { authenticateToken, requireSuperAdmin } = require('../../core/authMiddleware');
+const { authenticateToken, authenticateDownloadTicket, requireSuperAdmin } = require('../../core/authMiddleware');
 
 // Hint: مجلد الرفع المؤقت بجوار قاعدة البيانات (data/temp_uploads)
 const { DB_PATH } = require('../../core/config');
@@ -28,12 +28,14 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // حتى 100 ميغابايت لقاعدة البيانات
 });
 
-// كافة مسارات النسخ الاحتياطي تتطلب أن يكون المستخدم SUPER_ADMIN حصراً
+// Hint: التنزيل المباشر يُصادق بتذكرة قصيرة العمر (تُصدر للسوبر أدمن فقط)
+router.get('/download', authenticateDownloadTicket('backup', ['filename']), requireSuperAdmin, backupController.downloadBackup);
+
+// كافة مسارات النسخ الاحتياطي الأخرى تتطلب أن يكون المستخدم SUPER_ADMIN حصراً
 router.use(authenticateToken, requireSuperAdmin);
 
 router.get('/', backupController.listBackups);
 router.post('/create', backupController.createBackup);
-router.get('/download', backupController.downloadBackup);
 router.post('/restore', upload.single('file'), backupController.restoreBackup);
 router.delete('/:filename', backupController.deleteBackup);
 

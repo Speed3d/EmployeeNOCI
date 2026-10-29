@@ -1,5 +1,5 @@
 /**
- * Hint: متحكم المصادقة وتسجيل الدخول والملف الشخصي وتغيير الصورة وكلمة المرور (النقطة 14)
+ * Hint: متحكم المصادقة وتسجيل الدخول والملف الشخصي وتغيير الصورة وكلمة المرور
  */
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,62 +7,65 @@ const db = require('../../core/database');
 const { JWT_SECRET } = require('../../core/config');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
-const { encrypt, decrypt } = require('../../core/cryptoHelper');
+const { encrypt } = require('../../core/cryptoHelper');
+const { isBlocked, recordFailure, clearFailures } = require('../../core/rateLimiter');
+const { asTrimmedString, passwordPolicyError, badRequest } = require('../../shared/validators');
 
-// Hint: سجل محاولات الدخول والتحقق الفاشلة في الذاكرة لحماية النظام من هجمات التخمين (Brute-Force Protection)
-const failedAuthAttempts = new Map();
-const MAX_AUTH_ATTEMPTS = 15;
-const AUTH_LOCKOUT_MS = 15 * 60 * 1000; // 15 دقيقة
+const SESSION_TTL = '7d';
 
 /**
- * Hint: فحص ما إذا كان عنوان الـ IP متجاوزاً لعدد المحاولات الفاشلة المسموح بها
+ * Hint: الشكل الموحد لبيانات المستخدم في كل الردود (الدخول و /auth/me والملف الشخصي)
  */
-function isRateLimited(ipKey) {
-  const record = failedAuthAttempts.get(ipKey);
-  if (!record) return false;
-  if (Date.now() - record.firstAttemptAt > AUTH_LOCKOUT_MS) {
-    failedAuthAttempts.delete(ipKey);
-    return false;
-  }
-  return record.count >= MAX_AUTH_ATTEMPTS;
+function serializeUser(u) {
+  return {
+    id: u.id,
+    username: u.username,
+    fullName: u.full_name,
+    role: u.role,
+    canManageExclusions: u.can_manage_exclusions === 1,
+    canRecommit: u.can_recommit === 1,
+    avatarUrl: u.avatar_url || null,
+    mustChangePassword: u.must_change_password === 1
+  };
 }
 
-/**
- * Hint: تسجيل محاولة فاشلة لعنوان الـ IP
- */
-function recordFailedAttempt(ipKey) {
-  const now = Date.now();
-  const record = failedAuthAttempts.get(ipKey);
-  if (!record || now - record.firstAttemptAt > AUTH_LOCKOUT_MS) {
-    failedAuthAttempts.set(ipKey, { count: 1, firstAttemptAt: now });
-  } else {
-    record.count += 1;
-  }
+function loadUser(id) {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 }
 
-/**
- * Hint: تصفير عداد المحاولات الفاشلة بعد نجاح المصادقة
- */
-function clearFailedAttempts(ipKey) {
-  failedAuthAttempts.delete(ipKey);
+function getSetting(key) {
+  const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
+  return row ? row.value : null;
+}
+
+function issueToken(user) {
+  return jwt.sign(
+    { id: user.id, username: user.username, role: user.role, tv: user.token_version || 0 },
+    JWT_SECRET,
+    { expiresIn: SESSION_TTL }
+  );
 }
 
 function login(req, res) {
-  const { username, password } = req.body;
-  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const username = typeof req.body.username === 'string' ? asTrimmedString(req.body.username, 100) : null;
+  const password = typeof req.body.password === 'string' ? req.body.password : null;
+  const clientIp = req.clientIp;
 
-  if (isRateLimited(`login_${clientIp}`)) {
+  if (!username || !password) {
+    return badRequest(res, 'يرجى إدخال اسم المستخدم وكلمة المرور');
+  }
+
+  if (isBlocked('login', req, username)) {
     return errorResponse(res, 'تم تجاوز الحد المسموح لمحاولات تسجيل الدخول. يرجى الانتظار 15 دقيقة ثم المحاولة مجدداً', 429);
   }
 
-  if (!username || !password) {
-    return errorResponse(res, 'يرجى إدخال اسم المستخدم وكلمة المرور', 400);
-  }
+  const user = db.prepare('SELECT * FROM users WHERE username = ? AND deleted_at IS NULL').get(username);
+  // Hint: نفس الرسالة لاسم غير موجود أو كلمة خاطئة أو حساب معطل حتى لا يُكشف وجود الحسابات
+  const passwordOk = user ? bcrypt.compareSync(password, user.password_hash) : false;
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.trim());
-  if (!user) {
-    recordFailedAttempt(`login_${clientIp}`);
-    logAction(null, username, 'محاولة دخول فاشلة', 'اسم المستخدم غير موجود', clientIp);
+  if (!user || !passwordOk) {
+    recordFailure('login', req, username);
+    logAction(user ? user.id : null, user ? user.full_name : username, 'محاولة دخول فاشلة', user ? 'كلمة المرور غير صحيحة' : 'اسم المستخدم غير موجود', clientIp);
     return errorResponse(res, 'بيانات الدخول غير صحيحة', 401);
   }
 
@@ -71,119 +74,112 @@ function login(req, res) {
     return errorResponse(res, 'هذا الحساب معطل، يرجى مراجعة المشرف', 403);
   }
 
-  const isPasswordValid = bcrypt.compareSync(password, user.password_hash);
-  if (!isPasswordValid) {
-    recordFailedAttempt(`login_${clientIp}`);
-    logAction(user.id, user.full_name, 'محاولة دخول فاشلة', 'كلمة المرور غير صحيحة', clientIp);
-    return errorResponse(res, 'بيانات الدخول غير صحيحة', 401);
-  }
+  clearFailures('login', req, username);
 
-  clearFailedAttempts(`login_${clientIp}`);
-
-  const bannerSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_text');
-  const bannerActiveSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('announcement_banner_active');
-  const maintenanceSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('maintenance_mode');
-  const isMaintenance = maintenanceSetting && maintenanceSetting.value === 'true';
+  const isMaintenance = getSetting('maintenance_mode') === 'true';
 
   // إذا كان النظام في وضع الصيانة، يُمنع غير السوبر أدمن من تسجيل الدخول
   if (isMaintenance && user.role !== 'SUPER_ADMIN') {
     logAction(user.id, user.full_name, 'محاولة دخول مرفوضة (وضع الصيانة)', 'النظام في وضع الصيانة حالياً', clientIp);
     return res.status(503).json({
       success: false,
+      code: 'MAINTENANCE',
       message: 'النظام في وضع الصيانة والتحديث حالياً، يرجى المحاولة لاحقاً',
       isMaintenance: true
     });
   }
 
-  // إنشاء التوكن
-  const token = jwt.sign(
-    { id: user.id, username: user.username, role: user.role },
-    JWT_SECRET,
-    { expiresIn: '30d' }
-  );
+  const token = issueToken(user);
 
   logAction(user.id, user.full_name, 'تسجيل دخول ناجح', `تسجيل الدخول من ${clientIp}`, clientIp);
 
-  const logoSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('logo_url');
-  const institutionSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('institution_name');
-  const appTitleSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('app_title');
-  const activeYearSetting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('active_year');
-
   return successResponse(res, {
     token,
-    user: {
-      id: user.id,
-      username: user.username,
-      fullName: user.full_name,
-      role: user.role,
-      canManageExclusions: user.can_manage_exclusions === 1,
-      canRecommit: user.can_recommit === 1,
-      avatarUrl: user.avatar_url
-    },
+    user: serializeUser(user),
     systemStatus: {
-      announcementBanner: bannerActiveSetting && bannerActiveSetting.value === 'true' ? (bannerSetting ? bannerSetting.value : '') : '',
+      announcementBanner: getSetting('announcement_banner_active') === 'true' ? (getSetting('announcement_banner_text') || '') : '',
       isMaintenance,
-      logoUrl: logoSetting ? logoSetting.value : '',
-      institutionName: institutionSetting ? institutionSetting.value : '',
-      appTitle: appTitleSetting ? appTitleSetting.value : '',
-      activeYear: activeYearSetting ? activeYearSetting.value : '2026'
+      logoUrl: getSetting('logo_url') || '',
+      institutionName: getSetting('institution_name') || '',
+      appTitle: getSetting('app_title') || '',
+      activeYear: getSetting('active_year') || '2026'
     }
   }, 'تم تسجيل الدخول بنجاح');
 }
 
 function getMe(req, res) {
-  const currentUser = db.prepare('SELECT id, username, full_name, role, can_manage_exclusions, can_recommit, avatar_url, is_active FROM users WHERE id = ?').get(req.user.id);
-  return successResponse(res, { user: currentUser });
+  return successResponse(res, { user: serializeUser(loadUser(req.user.id)) });
 }
 
 /**
  * تحديث الملف الشخصي للمستخدم الحالي (الاسم، كلمة المرور، الصورة)
+ * Hint: تغيير كلمة المرور يُبطل كل الجلسات السابقة ويُرجع رمزاً جديداً للجلسة الحالية
  */
 function updateProfile(req, res) {
-  const { fullName, avatarUrl, oldPassword, newPassword } = req.body;
-  const user = req.user;
-
-  const currentDbUser = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
-  if (!currentDbUser) {
+  const { avatarUrl, oldPassword, newPassword } = req.body;
+  const current = loadUser(req.user.id);
+  if (!current) {
     return errorResponse(res, 'المستخدم غير موجود', 404);
   }
 
-  let updatedName = fullName ? fullName.trim() : currentDbUser.full_name;
-  let updatedAvatar = avatarUrl !== undefined ? avatarUrl : currentDbUser.avatar_url;
+  let updatedName = current.full_name;
+  if (req.body.fullName !== undefined) {
+    updatedName = asTrimmedString(req.body.fullName, 120);
+    if (!updatedName) return badRequest(res, 'الاسم الكامل غير صالح');
+  }
+
+  let updatedAvatar = current.avatar_url;
+  if (avatarUrl !== undefined) {
+    if (avatarUrl !== null && (typeof avatarUrl !== 'string' || !/^\/uploads\/avatars\/[\w.-]+$/.test(avatarUrl))) {
+      return badRequest(res, 'رابط الصورة الشخصية غير صالح');
+    }
+    updatedAvatar = avatarUrl;
+  }
+
+  // Hint: أثناء إلزام تغيير كلمة المرور المؤقتة لا يُسمح إلا بتغييرها
+  if (current.must_change_password && !newPassword) {
+    return errorResponse(res, 'يجب تغيير كلمة المرور المؤقتة أولاً', 403);
+  }
 
   let query = 'UPDATE users SET full_name = ?, avatar_url = ?';
   const params = [updatedName, updatedAvatar];
+  let passwordChanged = false;
 
-  // إذا طلب تغيير كلمة المرور
-  if (newPassword) {
-    if (!oldPassword) {
-      return errorResponse(res, 'يرجى إدخال كلمة المرور الحالية لتأكيد التغيير', 400);
+  if (newPassword !== undefined && newPassword !== null && newPassword !== '') {
+    if (typeof oldPassword !== 'string' || !oldPassword) {
+      return badRequest(res, 'يرجى إدخال كلمة المرور الحالية لتأكيد التغيير');
     }
-    const isMatch = bcrypt.compareSync(oldPassword, currentDbUser.password_hash);
-    if (!isMatch) {
-      return errorResponse(res, 'كلمة المرور الحالية غير صحيحة', 400);
+    if (isBlocked('profile', req, current.id)) {
+      return errorResponse(res, 'تم تجاوز الحد المسموح للمحاولات. يرجى الانتظار ثم المحاولة مجدداً', 429);
     }
-    if (newPassword.trim().length < 6) {
-      return errorResponse(res, 'يجب ألا تقل كلمة المرور الجديدة عن 6 خانات', 400);
+    if (!bcrypt.compareSync(oldPassword, current.password_hash)) {
+      recordFailure('profile', req, current.id);
+      return badRequest(res, 'كلمة المرور الحالية غير صحيحة');
     }
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) return badRequest(res, policyError);
+    if (newPassword === oldPassword) {
+      return badRequest(res, 'كلمة المرور الجديدة يجب أن تختلف عن الحالية');
+    }
+    clearFailures('profile', req, current.id);
 
-    const newHash = bcrypt.hashSync(newPassword.trim(), 10);
-    const newEncrypted = encrypt(newPassword.trim());
-
-    query += ', password_hash = ?, encrypted_password = ?';
-    params.push(newHash, newEncrypted);
+    query += ', password_hash = ?, encrypted_password = ?, must_change_password = 0, token_version = token_version + 1';
+    params.push(bcrypt.hashSync(newPassword, 10), encrypt(newPassword));
+    passwordChanged = true;
   }
 
   query += ' WHERE id = ?';
-  params.push(user.id);
-
+  params.push(current.id);
   db.prepare(query).run(...params);
 
-  logAction(user.id, updatedName, 'تعديل الملف الشخصي', 'تم تحديث بيانات الملف الشخصي');
+  logAction(current.id, updatedName, 'تعديل الملف الشخصي', passwordChanged ? 'تم تحديث بيانات الملف الشخصي وتغيير كلمة المرور' : 'تم تحديث بيانات الملف الشخصي', req.clientIp);
 
-  const refreshed = db.prepare('SELECT id, username, full_name, role, can_manage_exclusions, can_recommit, avatar_url FROM users WHERE id = ?').get(user.id);
-
-  return successResponse(res, refreshed, 'تم تحديث الملف الشخصي بنجاح');
+  const refreshed = loadUser(current.id);
+  return successResponse(res, {
+    user: serializeUser(refreshed),
+    // Hint: رمز جديد يحل محل القديم بعد تغيير كلمة المرور
+    token: passwordChanged ? issueToken(refreshed) : undefined
+  }, 'تم تحديث الملف الشخصي بنجاح');
 }
 
 /**
@@ -200,75 +196,33 @@ function uploadAvatar(req, res) {
   const avatarUrl = `/uploads/avatars/${file.filename}`;
   db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(avatarUrl, user.id);
 
-  logAction(user.id, user.full_name, 'تحديث الصورة الشخصية', `رفع صورة شخصية جديدة: ${avatarUrl}`);
+  logAction(user.id, user.full_name, 'تحديث الصورة الشخصية', `رفع صورة شخصية جديدة: ${avatarUrl}`, req.clientIp);
 
   return successResponse(res, { avatarUrl }, 'تم رفع وتحديث الصورة الشخصية بنجاح');
 }
 
 /**
- * Hint: التحقق الأمني الفعلي من كلمة مرور المستخدم الحالي أو السوبر أدمن في قاعدة البيانات
- * تم إلغاء أي تجاوز ثابت (Hardcoded Bypass) والاعتماد حصرياً على التجزئة المشفرة في القاعدة
+ * Hint: التحقق من كلمة مرور المستخدم الحالي فقط (bcrypt) كتأكيد أمني قبل العمليات الحساسة في الواجهة
  */
 function verifyPassword(req, res) {
-  let { password } = req.body;
   const user = req.user;
-  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
 
-  if (isRateLimited(`verify_${clientIp}_${user.id}`)) {
+  if (!password) {
+    return badRequest(res, 'يرجى إدخال كلمة المرور للتأكيد الأمني');
+  }
+
+  if (isBlocked('verify', req, user.id)) {
     return errorResponse(res, 'تم تجاوز الحد المسموح لمحاولات التحقق الأمني. يرجى الانتظار قليلاً ثم المحاولة مجدداً', 429);
   }
 
-  if (!password) {
-    return errorResponse(res, 'يرجى إدخال كلمة المرور للتأكيد الأمني', 400);
+  const current = loadUser(user.id);
+  if (!current || !bcrypt.compareSync(password, current.password_hash)) {
+    recordFailure('verify', req, user.id);
+    return errorResponse(res, 'كلمة المرور غير صحيحة', 403);
   }
 
-  // تنظيف وتحويل الأرقام العربية الهندية (١٢٣) إلى أرقام إنجليزية (123) تحسباً لاختلاف لغات لوحة المفاتيح
-  const cleanPwd = String(password).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
-
-  // 1. فحص مع المستخدم الحالي في قاعدة البيانات
-  const currentUser = db.prepare('SELECT id, password_hash, encrypted_password FROM users WHERE id = ? AND is_active = 1').get(user.id);
-  let isValid = false;
-
-  if (currentUser) {
-    if (currentUser.password_hash && bcrypt.compareSync(cleanPwd, currentUser.password_hash)) {
-      isValid = true;
-    }
-    if (!isValid && currentUser.encrypted_password) {
-      try {
-        const dec = decrypt(currentUser.encrypted_password);
-        if (dec && dec === cleanPwd) {
-          isValid = true;
-        }
-      } catch (_) {}
-    }
-  }
-
-  // 2. إذا لم تتطابق، فحص مع حسابات السوبر أدمن النشطة في القاعدة
-  if (!isValid) {
-    const superAdmins = db.prepare("SELECT id, password_hash, encrypted_password FROM users WHERE role = 'SUPER_ADMIN' AND is_active = 1").all();
-    for (const sa of superAdmins) {
-      if (sa.password_hash && bcrypt.compareSync(cleanPwd, sa.password_hash)) {
-        isValid = true;
-        break;
-      }
-      if (sa.encrypted_password) {
-        try {
-          const dec = decrypt(sa.encrypted_password);
-          if (dec && dec === cleanPwd) {
-            isValid = true;
-            break;
-          }
-        } catch (_) {}
-      }
-    }
-  }
-
-  if (!isValid) {
-    recordFailedAttempt(`verify_${clientIp}_${user.id}`);
-    return errorResponse(res, 'كلمة المرور غير صحيحة، يرجى إدخال كلمة مرور الحساب المعتمدة', 403);
-  }
-
-  clearFailedAttempts(`verify_${clientIp}_${user.id}`);
+  clearFailures('verify', req, user.id);
   return successResponse(res, { verified: true }, 'تم التحقق من كلمة المرور بنجاح');
 }
 
@@ -277,5 +231,7 @@ module.exports = {
   getMe,
   updateProfile,
   uploadAvatar,
-  verifyPassword
+  verifyPassword,
+  serializeUser,
+  issueToken
 };

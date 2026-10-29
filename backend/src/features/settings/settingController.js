@@ -2,55 +2,99 @@
  * Hint: متحكم لوحة إعدادات السوبر أدمن، كشف كلمات المرور، تصفير النظام، وإدارة المستخدمين
  */
 const bcrypt = require('bcryptjs');
-const path = require('path');
-const fs = require('fs');
 const db = require('../../core/database');
 const { logAction } = require('../../core/auditLogger');
 const { successResponse, errorResponse } = require('../../shared/responseHelper');
 const { encrypt, decrypt } = require('../../core/cryptoHelper');
 const { ROLES } = require('../../shared/constants');
-const { DB_PATH } = require('../../core/config');
 const { createBackupFile } = require('../../core/backupScheduler');
+const { isBlocked, recordFailure, clearFailures } = require('../../core/rateLimiter');
+const {
+  isHHMM, isHexColor, asBool, asTrimmedString, toPositiveInt, passwordPolicyError, badRequest
+} = require('../../shared/validators');
+const { timeToMinutes } = require('../../tools/timeUtils');
 const seedEmployees = require('../../../scripts/seed_employees');
 
-// Hint: دالة مساعدة لتحويل الأرقام العربية/الفارسية إلى إنجليزية عند إدخال كلمة المرور
-function normalizeNumerals(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
-    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
-    .trim();
+// Hint: المفاتيح المسموح بتعديلها ومدقق كل منها (أي مفتاح آخر يُرفض)
+const SETTING_VALIDATORS = {
+  institution_name: v => asTrimmedString(v, 200) !== null && String(v).trim() !== '',
+  app_title: v => asTrimmedString(v, 200) !== null && String(v).trim() !== '',
+  logo_url: v => v === '' || (typeof v === 'string' && /^(\/uploads\/branding\/[\w.-]+|https:\/\/\S{1,500})$/.test(v)),
+  work_start_time: isHHMM,
+  work_end_time: isHHMM,
+  bonus_enabled: v => v === 'true' || v === 'false' || typeof v === 'boolean',
+  bonus_mode: v => v === 'default' || v === 'custom',
+  early_bonus_time: isHHMM,
+  overtime_bonus_time: isHHMM,
+  single_punch_exit_threshold: isHHMM,
+  announcement_banner_text: v => asTrimmedString(v, 500) !== null,
+  announcement_banner_active: v => v === 'true' || v === 'false' || typeof v === 'boolean',
+  maintenance_mode: v => v === 'true' || v === 'false' || typeof v === 'boolean',
+  color_active_leave: isHexColor,
+  color_seconded: isHexColor,
+  color_terminated: isHexColor,
+  color_vip_exempt: isHexColor
+};
+
+function readSettings() {
+  const settings = {};
+  for (const r of db.prepare('SELECT key, value FROM system_settings').all()) {
+    settings[r.key] = r.value;
+  }
+  return settings;
+}
+
+function countActiveSuperAdmins(excludeId = null) {
+  return db.prepare(`
+    SELECT COUNT(*) as c FROM users
+    WHERE role = 'SUPER_ADMIN' AND is_active = 1 AND deleted_at IS NULL AND id != ?
+  `).get(excludeId || 0).c;
 }
 
 // 1. إعدادات النظام العامة
 function getSettings(req, res) {
-  const rows = db.prepare('SELECT key, value, description FROM system_settings').all();
-  const settings = {};
-  for (const r of rows) {
-    settings[r.key] = r.value;
-  }
-  return successResponse(res, settings);
+  return successResponse(res, readSettings());
 }
 
 function updateSettings(req, res) {
-  const settingsToUpdate = req.body;
+  const entries = req.body;
   const user = req.user;
 
-  const updateStmt = db.prepare('UPDATE system_settings SET value = ? WHERE key = ?');
-  const insertStmt = db.prepare('INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)');
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries) || Object.keys(entries).length === 0) {
+    return badRequest(res, 'لم يتم إرسال أي إعدادات للحفظ');
+  }
 
-  const runUpdates = db.transaction((entries) => {
-    for (const [key, val] of Object.entries(entries)) {
-      const res = updateStmt.run(String(val), key);
-      if (res.changes === 0) {
-        insertStmt.run(key, String(val));
-      }
+  for (const [key, val] of Object.entries(entries)) {
+    const validator = SETTING_VALIDATORS[key];
+    if (!validator) {
+      return badRequest(res, `الإعداد [${key}] غير معروف`);
     }
-  });
+    if (!validator(val)) {
+      return badRequest(res, `قيمة الإعداد [${key}] غير صالحة`);
+    }
+  }
 
-  runUpdates(settingsToUpdate);
+  // Hint: التحقق من منطقية أوقات الدوام بعد دمج القيم الجديدة مع الحالية
+  const merged = { ...readSettings(), ...Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, String(v)])) };
+  if (timeToMinutes(merged.work_end_time) <= timeToMinutes(merged.work_start_time)) {
+    return badRequest(res, 'وقت نهاية الدوام يجب أن يكون بعد وقت بدايته');
+  }
+  const threshold = timeToMinutes(merged.single_punch_exit_threshold || '12:30');
+  if (threshold <= timeToMinutes(merged.work_start_time) || threshold >= timeToMinutes(merged.work_end_time)) {
+    return badRequest(res, 'عتبة البصمة المنفردة يجب أن تقع بين بداية الدوام ونهايته');
+  }
 
-  logAction(user.id, user.full_name, 'تعديل إعدادات النظام', settingsToUpdate);
+  const upsert = db.prepare(`
+    INSERT INTO system_settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `);
+  db.transaction(() => {
+    for (const [key, val] of Object.entries(entries)) {
+      upsert.run(key, typeof val === 'string' ? val.trim() : String(val));
+    }
+  })();
+
+  logAction(user.id, user.full_name, 'تعديل إعدادات النظام', entries, req.clientIp);
 
   return successResponse(res, null, 'تم حفظ الإعدادات بنجاح');
 }
@@ -67,12 +111,12 @@ function uploadLogo(req, res) {
   }
 
   const logoUrl = `/uploads/branding/${file.filename}`;
-  const updateRes = db.prepare('UPDATE system_settings SET value = ? WHERE key = ?').run(logoUrl, 'logo_url');
-  if (updateRes.changes === 0) {
-    db.prepare('INSERT INTO system_settings (key, value) VALUES (?, ?)').run('logo_url', logoUrl);
-  }
+  db.prepare(`
+    INSERT INTO system_settings (key, value) VALUES ('logo_url', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(logoUrl);
 
-  logAction(user.id, user.full_name, 'تحديث شعار النظام', `رفع شعار جديد: ${logoUrl}`);
+  logAction(user.id, user.full_name, 'تحديث شعار النظام', `رفع شعار جديد: ${logoUrl}`, req.clientIp);
 
   return successResponse(res, { logoUrl }, 'تم تحديث شعار النظام بنجاح');
 }
@@ -80,8 +124,10 @@ function uploadLogo(req, res) {
 // 2. إدارة المستخدمين والصلاحيات
 function listUsers(req, res) {
   const users = db.prepare(`
-    SELECT id, username, full_name, role, can_manage_exclusions, can_recommit, avatar_url, is_active, created_at
+    SELECT id, username, full_name, role, can_manage_exclusions, can_recommit, avatar_url, is_active,
+           must_change_password, created_at
     FROM users
+    WHERE deleted_at IS NULL
     ORDER BY id ASC
   `).all();
 
@@ -89,118 +135,150 @@ function listUsers(req, res) {
 }
 
 function createUser(req, res) {
-  const { username, password, fullName, role, canManageExclusions, canRecommit } = req.body;
+  const { password, role, canManageExclusions, canRecommit } = req.body;
   const currentUser = req.user;
+  const username = asTrimmedString(req.body.username, 60);
+  const fullName = asTrimmedString(req.body.fullName, 120);
 
   if (!username || !password || !fullName || !role) {
-    return errorResponse(res, 'اسم المستخدم، كلمة المرور، الاسم الكامل، والرتبة حقول إلزامية', 400);
+    return badRequest(res, 'اسم المستخدم، كلمة المرور، الاسم الكامل، والرتبة حقول إلزامية');
   }
+  if (!/^[A-Za-z0-9؀-ۿ._-]{3,60}$/.test(username)) {
+    return badRequest(res, 'اسم المستخدم يجب أن يكون من 3 أحرف على الأقل بلا مسافات (أحرف أو أرقام أو . _ -)');
+  }
+  const policyError = passwordPolicyError(password);
+  if (policyError) return badRequest(res, policyError);
 
   const cleanRole = role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.DATA_ENTRY;
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username.trim());
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
   if (existing) {
-    return errorResponse(res, 'اسم المستخدم مسجل مسبقاً، يرجى اختيار اسم آخر', 400);
+    return badRequest(res, 'اسم المستخدم مسجل مسبقاً، يرجى اختيار اسم آخر');
   }
 
-  const hash = bcrypt.hashSync(password, 10);
-  const encrypted = encrypt(password);
-
-  const stmt = db.prepare(`
-    INSERT INTO users (username, password_hash, encrypted_password, full_name, role, can_manage_exclusions, can_recommit, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-  `);
-
-  const result = stmt.run(
-    username.trim(),
-    hash,
-    encrypted,
-    fullName.trim(),
+  // Hint: كلمة المرور التي يحددها الأدمن مؤقتة ويجب على المستخدم تغييرها عند أول دخول
+  const result = db.prepare(`
+    INSERT INTO users (username, password_hash, encrypted_password, full_name, role, can_manage_exclusions, can_recommit, is_active, must_change_password)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)
+  `).run(
+    username,
+    bcrypt.hashSync(password, 10),
+    encrypt(password),
+    fullName,
     cleanRole,
-    canManageExclusions ? 1 : 0,
-    canRecommit ? 1 : 0
+    asBool(canManageExclusions) ? 1 : 0,
+    asBool(canRecommit) ? 1 : 0
   );
 
-  logAction(currentUser.id, currentUser.full_name, 'إنشاء مستخدم جديد', `إنشاء المستخدم [${username}] بالدور [${cleanRole}]`);
+  logAction(currentUser.id, currentUser.full_name, 'إنشاء مستخدم جديد', `إنشاء المستخدم [${username}] بالدور [${cleanRole}]`, req.clientIp);
 
   return successResponse(res, { id: result.lastInsertRowid }, 'تم إنشاء المستخدم بنجاح', 201);
 }
 
 function updateUser(req, res) {
-  const { id } = req.params;
-  const { fullName, role, isActive, newPassword, canManageExclusions, canRecommit } = req.body;
+  const id = toPositiveInt(req.params.id);
+  const { role, isActive, newPassword, canManageExclusions, canRecommit } = req.body;
   const currentUser = req.user;
 
-  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const targetUser = id && db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(id);
   if (!targetUser) {
     return errorResponse(res, 'المستخدم غير موجود', 404);
   }
 
-  if (targetUser.role === ROLES.SUPER_ADMIN && currentUser.id === targetUser.id && isActive === 0) {
-    return errorResponse(res, 'لا يمكنك تعطيل حسابك الشخصي (السوبر أدمن)', 400);
+  let fullName = targetUser.full_name;
+  if (req.body.fullName !== undefined) {
+    fullName = asTrimmedString(req.body.fullName, 120);
+    if (!fullName) return badRequest(res, 'الاسم الكامل غير صالح');
   }
 
-  const cleanRole = role ? (role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.DATA_ENTRY) : targetUser.role;
+  const newRole = role !== undefined ? (role === ROLES.SUPER_ADMIN ? ROLES.SUPER_ADMIN : ROLES.DATA_ENTRY) : targetUser.role;
+  const newActive = isActive !== undefined ? (asBool(isActive) ? 1 : 0) : targetUser.is_active;
+  const isSelf = targetUser.id === currentUser.id;
 
-  let query = `
-    UPDATE users SET 
-      full_name = ?, 
-      role = ?, 
-      is_active = ?,
-      can_manage_exclusions = ?,
-      can_recommit = ?
-  `;
+  // Hint: منع المستخدم من تعطيل نفسه أو تخفيض رتبته، ومنع ترك النظام بلا سوبر أدمن نشط
+  if (isSelf && (newActive === 0 || newRole !== targetUser.role)) {
+    return badRequest(res, 'لا يمكنك تعطيل حسابك أو تغيير رتبتك بنفسك');
+  }
+  const losesSuperAdmin = targetUser.role === ROLES.SUPER_ADMIN && targetUser.is_active === 1
+    && (newRole !== ROLES.SUPER_ADMIN || newActive === 0);
+  if (losesSuperAdmin && countActiveSuperAdmins(targetUser.id) === 0) {
+    return badRequest(res, 'لا يمكن تنفيذ التعديل لأنه سيترك النظام بدون أي سوبر أدمن نشط');
+  }
+
+  let query = 'UPDATE users SET full_name = ?, role = ?, is_active = ?, can_manage_exclusions = ?, can_recommit = ?';
   const params = [
-    fullName ? fullName.trim() : targetUser.full_name,
-    cleanRole,
-    isActive !== undefined ? (isActive ? 1 : 0) : targetUser.is_active,
-    canManageExclusions !== undefined ? (canManageExclusions ? 1 : 0) : targetUser.can_manage_exclusions,
-    canRecommit !== undefined ? (canRecommit ? 1 : 0) : targetUser.can_recommit
+    fullName,
+    newRole,
+    newActive,
+    canManageExclusions !== undefined ? (asBool(canManageExclusions) ? 1 : 0) : targetUser.can_manage_exclusions,
+    canRecommit !== undefined ? (asBool(canRecommit) ? 1 : 0) : targetUser.can_recommit
   ];
 
-  if (newPassword && newPassword.trim().length >= 6) {
-    query += ', password_hash = ?, encrypted_password = ?';
-    params.push(bcrypt.hashSync(newPassword.trim(), 10));
-    params.push(encrypt(newPassword.trim()));
+  // Hint: إبطال الجلسات عند تغيير الرتبة أو التعطيل أو كلمة المرور
+  let revokeSessions = newRole !== targetUser.role || newActive !== targetUser.is_active;
+
+  if (newPassword !== undefined && newPassword !== null && newPassword !== '') {
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) return badRequest(res, policyError);
+    query += ', password_hash = ?, encrypted_password = ?, must_change_password = ?';
+    // إعادة التعيين من الأدمن تجعل كلمة المرور مؤقتة (عدا حسابه الشخصي)
+    params.push(bcrypt.hashSync(newPassword, 10), encrypt(newPassword), isSelf ? 0 : 1);
+    revokeSessions = true;
+  }
+
+  if (revokeSessions) {
+    query += ', token_version = token_version + 1';
   }
 
   query += ' WHERE id = ?';
   params.push(id);
-
   db.prepare(query).run(...params);
 
-  logAction(currentUser.id, currentUser.full_name, 'تعديل مستخدم', `تعديل بيانات المستخدم [${targetUser.username}]`);
+  logAction(currentUser.id, currentUser.full_name, 'تعديل مستخدم', `تعديل بيانات المستخدم [${targetUser.username}]`, req.clientIp);
 
   return successResponse(res, null, 'تم تحديث بيانات المستخدم بنجاح');
 }
 
 /**
- * كشف كلمة المرور لمستخدم محدد (حصري للسوبر أدمن مع تسجيل أمني صارم - النقطة 15)
+ * كشف كلمة المرور لمستخدم محدد (حصري للسوبر أدمن)
+ * Hint: يتطلب كلمة مرور الأدمن نفسه ويتحقق منها الخادم، مع حد للمحاولات وتسجيل أمني لكل كشف
  */
 function revealPassword(req, res) {
-  const { id } = req.params;
+  const id = toPositiveInt(req.params.id);
   const currentUser = req.user;
+  const adminPassword = typeof req.body.adminPassword === 'string' ? req.body.adminPassword : '';
 
-  const targetUser = db.prepare('SELECT id, username, full_name, encrypted_password FROM users WHERE id = ?').get(id);
+  if (!adminPassword) {
+    return badRequest(res, 'يرجى إدخال كلمة مرورك للتأكيد');
+  }
+  if (isBlocked('reveal', req, currentUser.id)) {
+    return errorResponse(res, 'تم تجاوز الحد المسموح للمحاولات. يرجى الانتظار ثم المحاولة مجدداً', 429);
+  }
+
+  const admin = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(currentUser.id);
+  if (!admin || !bcrypt.compareSync(adminPassword, admin.password_hash)) {
+    recordFailure('reveal', req, currentUser.id);
+    logAction(currentUser.id, currentUser.full_name, 'محاولة كشف كلمة مرور فاشلة', `كلمة مرور الأدمن غير صحيحة (المستخدم المستهدف #${id})`, req.clientIp);
+    return errorResponse(res, 'كلمة مرورك غير صحيحة', 403);
+  }
+  clearFailures('reveal', req, currentUser.id);
+
+  const targetUser = id && db.prepare('SELECT id, username, full_name, encrypted_password FROM users WHERE id = ? AND deleted_at IS NULL').get(id);
   if (!targetUser) {
     return errorResponse(res, 'المستخدم غير موجود', 404);
   }
 
-  let plainPassword = '';
-  if (targetUser.encrypted_password) {
-    plainPassword = decrypt(targetUser.encrypted_password);
-  }
-
+  const plainPassword = targetUser.encrypted_password ? decrypt(targetUser.encrypted_password) : '';
   if (!plainPassword) {
-    return errorResponse(res, 'لا توجد كلمة مرور مشفرة قابلة للعرض لهذا المستخدم (ربما تم إنشاؤه بنسخة قديمة)، يرجى إعادة تعيين كلمة المرور له.', 404);
+    return errorResponse(res, 'لا توجد كلمة مرور قابلة للعرض لهذا المستخدم (ربما أُنشئ بنسخة قديمة أو من تثبيت آخر)، يرجى إعادة تعيين كلمة المرور له.', 404);
   }
 
-  // تسجيل عملية الكشف في سجل الحركات الأمني بالوقت والـ IP
   logAction(
     currentUser.id,
     currentUser.full_name,
     'كشف كلمة مرور',
-    `قام السوبر أدمن بكشف كلمة مرور المستخدم [${targetUser.username}] (${targetUser.full_name})`
+    `قام السوبر أدمن بكشف كلمة مرور المستخدم [${targetUser.username}] (${targetUser.full_name})`,
+    req.clientIp
   );
 
   return successResponse(res, {
@@ -211,22 +289,31 @@ function revealPassword(req, res) {
   }, 'تم فك تشفير كلمة المرور بنجاح');
 }
 
+/**
+ * Hint: حذف ناعم للمستخدم: يُعطَّل ويُخفى ويُبطَل رمزه، ويبقى أثره في السجلات والتنقلات والمحادثات
+ */
 function deleteUser(req, res) {
-  const { id } = req.params;
+  const id = toPositiveInt(req.params.id);
   const currentUser = req.user;
 
-  if (parseInt(id, 10) === currentUser.id) {
-    return errorResponse(res, 'لا يمكنك حذف حسابك الشخصي', 400);
+  if (id === currentUser.id) {
+    return badRequest(res, 'لا يمكنك حذف حسابك الشخصي');
   }
 
-  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const targetUser = id && db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(id);
   if (!targetUser) {
     return errorResponse(res, 'المستخدم غير موجود', 404);
   }
+  if (targetUser.role === ROLES.SUPER_ADMIN && targetUser.is_active === 1 && countActiveSuperAdmins(targetUser.id) === 0) {
+    return badRequest(res, 'لا يمكن حذف آخر سوبر أدمن نشط');
+  }
 
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  db.prepare(`
+    UPDATE users SET deleted_at = datetime('now'), is_active = 0, token_version = token_version + 1
+    WHERE id = ?
+  `).run(id);
 
-  logAction(currentUser.id, currentUser.full_name, 'حذف مستخدم', `حذف المستخدم [${targetUser.username}]`);
+  logAction(currentUser.id, currentUser.full_name, 'حذف مستخدم', `حذف المستخدم [${targetUser.username}]`, req.clientIp);
 
   return successResponse(res, null, 'تم حذف المستخدم بنجاح');
 }
@@ -238,33 +325,26 @@ function deleteUser(req, res) {
  * - wipe_all: مسح شامل بالكامل بما في ذلك الموظفون والأقسام ليصبح النظام فارغاً تماماً (0 موظف).
  */
 async function resetDatabase(req, res) {
-  const { password, resetMode = 'factory_default' } = req.body;
+  const { resetMode = 'factory_default' } = req.body;
   const user = req.user;
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
 
   if (!password) {
-    return errorResponse(res, 'يرجى إدخال كلمة مرور السوبر أدمن للتأكيد قبل التصفير', 400);
+    return badRequest(res, 'يرجى إدخال كلمة مرور السوبر أدمن للتأكيد قبل التصفير');
+  }
+  if (resetMode !== 'factory_default' && resetMode !== 'wipe_all') {
+    return badRequest(res, 'وضع التصفير غير معروف');
+  }
+  if (isBlocked('reset', req, user.id)) {
+    return errorResponse(res, 'تم تجاوز الحد المسموح للمحاولات. يرجى الانتظار ثم المحاولة مجدداً', 429);
   }
 
-  const normalizedPass = normalizeNumerals(password);
-
-  // التحقق من صحة كلمة المرور الخاصة بالسوبر أدمن الحالي
-  const currentAdmin = db.prepare('SELECT password_hash, encrypted_password FROM users WHERE id = ?').get(user.id);
-  if (!currentAdmin) {
-    return errorResponse(res, 'حساب السوبر أدمن غير موجود', 404);
-  }
-
-  let isValid = bcrypt.compareSync(normalizedPass, currentAdmin.password_hash) ||
-                bcrypt.compareSync(String(password).trim(), currentAdmin.password_hash);
-  if (!isValid && currentAdmin.encrypted_password) {
-    const plain = decrypt(currentAdmin.encrypted_password);
-    if (plain && (plain === normalizedPass || plain === String(password).trim())) {
-      isValid = true;
-    }
-  }
-
-  if (!isValid) {
+  const currentAdmin = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
+  if (!currentAdmin || !bcrypt.compareSync(password, currentAdmin.password_hash)) {
+    recordFailure('reset', req, user.id);
     return errorResponse(res, 'كلمة المرور غير صحيحة، تم إلغاء عملية التصفير لأسباب أمنية', 403);
   }
+  clearFailures('reset', req, user.id);
 
   // Hint: نسخة أمان إلزامية قبل التصفير؛ إذا فشلت يُلغى التصفير بالكامل حفاظاً على البيانات
   try {
@@ -277,9 +357,10 @@ async function resetDatabase(req, res) {
   const isWipeAll = resetMode === 'wipe_all';
 
   // تنفيذ التصفير الشامل للجداول الحركية والإعدادات والمستخدمين والقوالب
-  const resetTx = db.transaction(() => {
+  db.transaction(() => {
     db.exec('DELETE FROM attendance_records;');
     db.exec('DELETE FROM attendance_days;');
+    db.exec('DELETE FROM attendance_previews;');
     db.exec('DELETE FROM leaves;');
     db.exec('DELETE FROM official_holidays;');
     db.exec('DELETE FROM employee_schedules;');
@@ -290,7 +371,7 @@ async function resetDatabase(req, res) {
     db.exec('DELETE FROM chat_channels;');
     db.exec('DELETE FROM audit_logs;');
 
-    // حذف جميع المستخدمين الإضافيين والإبقاء على السوبر أدمن فقط
+    // حذف جميع المستخدمين الإضافيين فعلياً والإبقاء على حسابات السوبر أدمن فقط (التصفير هدفه المسح)
     db.prepare("DELETE FROM users WHERE id != ? AND role != 'SUPER_ADMIN'").run(user.id);
 
     // تصفير إعدادات النظام وإعادتها للقيم الافتراضية للمصنع
@@ -309,13 +390,8 @@ async function resetDatabase(req, res) {
       );
     `);
 
-    // إعادة بذر الإعدادات الافتراضية وقوالب الدوام الافتراضية
-    if (typeof db.seedDefaultSettings === 'function') {
-      db.seedDefaultSettings();
-    }
-    if (typeof db.seedScheduleTemplates === 'function') {
-      db.seedScheduleTemplates();
-    }
+    db.seedDefaultSettings();
+    db.seedScheduleTemplates();
 
     // تسجيل حالة البذر التلقائي للموظفين
     db.prepare('INSERT OR REPLACE INTO system_settings (key, value, description) VALUES (?, ?, ?)').run(
@@ -323,9 +399,7 @@ async function resetDatabase(req, res) {
       isWipeAll ? 'true' : 'false',
       'منع البذر التلقائي للموظفين عند اختيار التصفير الشامل الفارغ'
     );
-  });
-
-  resetTx();
+  })();
 
   // إذا اختار السوبر أدمن إعادة الضبط لنقطة البداية الأصلية، نعيد تغذية الموظفين والأقسام من ملف الإكسل الأساسي
   if (!isWipeAll) {
@@ -336,7 +410,6 @@ async function resetDatabase(req, res) {
     }
   }
 
-  // تفريغ ملف WAL لضمان كتابة التغييرات على القرص فوراً
   try {
     db.pragma('wal_checkpoint(TRUNCATE)');
   } catch (_) {}
@@ -345,23 +418,11 @@ async function resetDatabase(req, res) {
     ? 'قام السوبر أدمن بالتصفير الشامل الكامل (مع حذف كافة الموظفين والأقسام والمستخدمين والإعدادات والسجلات ليصبح النظام فارغاً تماماً)'
     : 'قام السوبر أدمن بإعادة ضبط المصنع لنقطة البداية الأصلية (مسح كافة الحركات والمستخدمين الإضافيين والقوالب المخصصة وإعادة الإعدادات وقائمة الموظفين للنسخة الأصلية)';
 
-  logAction(
-    user.id,
-    user.full_name,
-    'تصفير النظام وإعادة الضبط',
-    actionDesc
-  );
-
-  // جلب الإعدادات الافتراضية الجديدة لإرسالها للواجهة وتحديث حالتها فوراً
-  const rows = db.prepare('SELECT key, value FROM system_settings').all();
-  const freshSettings = {};
-  for (const r of rows) {
-    freshSettings[r.key] = r.value;
-  }
+  logAction(user.id, user.full_name, 'تصفير النظام وإعادة الضبط', actionDesc, req.clientIp);
 
   return successResponse(
     res,
-    { resetMode, settings: freshSettings },
+    { resetMode, settings: readSettings() },
     isWipeAll
       ? 'تم التصفير الشامل بالكامل وحذف جميع الموظفين والأقسام والسجلات والإعدادات بنجاح!'
       : 'تمت إعادة ضبط النظام لنقطة البداية الأصلية وإعادة قائمة الموظفين والإعدادات للوضع الافتراضي بنجاح!'
@@ -370,16 +431,19 @@ async function resetDatabase(req, res) {
 
 // 4. الترحيل السنوي
 function switchActiveYear(req, res) {
-  const year = req.body.year || req.body.newYear;
+  const year = toPositiveInt(req.body.year || req.body.newYear);
   const user = req.user;
 
-  if (!year || isNaN(year)) {
-    return errorResponse(res, 'يرجى تحديد سنة صحيحة (مثال: 2027)', 400);
+  if (!year || year < 2020 || year > 2100) {
+    return badRequest(res, 'يرجى تحديد سنة صحيحة من 4 أرقام (مثال: 2027)');
   }
 
-  db.prepare('UPDATE system_settings SET value = ? WHERE key = ?').run(String(year), 'active_year');
+  db.prepare(`
+    INSERT INTO system_settings (key, value) VALUES ('active_year', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(String(year));
 
-  logAction(user.id, user.full_name, 'ترحيل السنة المالية/الإدارية', `تم تفعيل السنة [${year}] كسنة نشطة للنظام`);
+  logAction(user.id, user.full_name, 'ترحيل السنة المالية/الإدارية', `تم تفعيل السنة [${year}] كسنة نشطة للنظام`, req.clientIp);
 
   return successResponse(res, { activeYear: String(year) }, `تم تفعيل السنة ${year} بنجاح مع بقاء كافة بيانات السنوات السابقة محفوظة`);
 }

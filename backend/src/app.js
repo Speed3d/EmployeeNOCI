@@ -4,10 +4,12 @@
  */
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
 
-const { PORT, HOST, UPLOADS_DIR } = require('./core/config');
+const { PORT, HOST, UPLOADS_DIR, ALLOWED_ORIGINS } = require('./core/config');
+const { attachClientIp } = require('./core/rateLimiter');
 const db = require('./core/database');
 
 // استيراد المسارات المقسمة حسب الميزات (Features)
@@ -21,18 +23,47 @@ const chatRoutes = require('./features/chat/chatRoutes');
 const reportRoutes = require('./features/reports/reportRoutes');
 const scheduleRoutes = require('./features/schedules/scheduleRoutes');
 const backupRoutes = require('./features/backup/backupRoutes');
+const downloadRoutes = require('./features/downloads/downloadRoutes');
 
 const app = express();
 
-// تفعيل CORS للسماح بالاتصال من أي دومين أو محاكي أندرويد/آيفون أو متصفح ويب
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+app.disable('x-powered-by');
+
+// Hint: ترويسات الأمان مع سياسة محتوى متوافقة مع تطبيق Flutter للويب (wasm وخطوط Google)
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'script-src': ["'self'", "'wasm-unsafe-eval'", 'https://www.gstatic.com'],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
+      'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+      'connect-src': ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com', 'https://www.gstatic.com'],
+      'worker-src': ["'self'", 'blob:']
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'same-site' }
 }));
 
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+// Hint: CORS مقيد: الأصل نفسه، والأصول المحددة في ALLOWED_ORIGINS، وأصول التطوير المحلية فقط
+const LOCAL_DEV_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+app.use(cors((req, callback) => {
+  const origin = req.headers.origin;
+  const sameOrigin = origin && req.headers.host && origin.replace(/^https?:\/\//, '') === req.headers.host;
+  const allowed = !origin || sameOrigin || ALLOWED_ORIGINS.includes(origin) || LOCAL_DEV_ORIGIN.test(origin);
+  callback(null, {
+    origin: allowed,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  });
+}));
+
+// Hint: تحديد عنوان العميل الحقيقي (يدعم Cloudflare Tunnel) لسجل الحركات وحماية التخمين
+app.use(attachClientIp);
+
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // استضافة مجلد المرفقات (الصور الشخصية والشعارات)
 app.use('/uploads', express.static(UPLOADS_DIR));
@@ -69,6 +100,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/downloads', downloadRoutes);
 
 // 3. استضافة ملفات الويب المجمعة من Flutter إن وجدت
 const webBuildPath = path.join(__dirname, '../../app/build/web');
@@ -88,6 +120,11 @@ if (fs.existsSync(webBuildPath)) {
     `);
   });
 }
+
+// Hint: أي مسار API غير معروف يرجع JSON واضحاً بدل صفحة HTML
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, message: 'المسار المطلوب غير موجود' });
+});
 
 // 4. معالج الأخطاء العام
 app.use((err, req, res, next) => {

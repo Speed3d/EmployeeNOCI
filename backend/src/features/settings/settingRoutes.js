@@ -50,7 +50,7 @@ router.get('/users', authenticateToken, requireSuperAdmin, settingController.lis
 router.post('/users', authenticateToken, requireSuperAdmin, settingController.createUser);
 router.put('/users/:id', authenticateToken, requireSuperAdmin, settingController.updateUser);
 router.delete('/users/:id', authenticateToken, requireSuperAdmin, settingController.deleteUser);
-router.get('/users/:id/reveal-password', authenticateToken, requireSuperAdmin, settingController.revealPassword);
+router.post('/users/:id/reveal-password', authenticateToken, requireSuperAdmin, settingController.revealPassword);
 
 // 3. تصفير النظام وإعادة الضبط (حصرياً للسوبر أدمن)
 router.post('/reset-db', authenticateToken, requireSuperAdmin, settingController.resetDatabase);

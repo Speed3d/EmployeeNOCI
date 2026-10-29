@@ -94,7 +94,21 @@ function formatMinutesArabic(totalMinutes) {
   return `${hours} ساعة و ${minutes} دقيقة`;
 }
 
+/**
+ * Hint: حدود يوم كامل بتوقيت بغداد (UTC+3 ثابت بلا توقيت صيفي) محوّلة إلى UTC بصيغة SQLite
+ * لأن CURRENT_TIMESTAMP في SQLite يُحفظ بتوقيت UTC
+ * مثال: 2026-10-29 -> ['2026-10-28 21:00:00', '2026-10-29 20:59:59']
+ */
+function baghdadDayBoundsUtc(ymd) {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  const startMs = Date.UTC(y, m - 1, d, 0, 0, 0) - 3 * 60 * 60 * 1000;
+  const endMs = startMs + 24 * 60 * 60 * 1000 - 1000;
+  const fmt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+  return [fmt(startMs), fmt(endMs)];
+}
+
 module.exports = {
+  baghdadDayBoundsUtc,
   getBaghdadDateStr,
   getDayOfWeekFromYmd,
   addDaysYmd,
