@@ -67,7 +67,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.navy.withOpacity(0.2),
+                            color: AppColors.navy.withValues(alpha: 0.2),
                             blurRadius: 16,
                             offset: const Offset(0, 4),
                           ),
@@ -78,7 +78,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                               child: Image.network(
                                 auth.fullLogoUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
+                                errorBuilder: (_, _, _) => const Icon(
                                   Icons.construction_rounded,
                                   color: AppColors.goldBright,
                                   size: 48,
@@ -127,9 +127,9 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.danger.withOpacity(0.06),
+                        color: AppColors.danger.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.danger.withOpacity(0.2)),
+                        border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
                       ),
                       child: const Text(
                         'عذراً، يجري العمل حالياً على صيانة وتحديث قواعد البيانات والنظام من قبل الإدارة العامة (السوبر أدمن).\n\nتم إيقاف دخول واستخدام مدخلي البيانات مؤقتاً لضمان سلامة البيانات، يرجى المحاولة لاحقاً بعد انتهاء الصيانة.',

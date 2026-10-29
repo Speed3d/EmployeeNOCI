@@ -152,7 +152,7 @@ class _EmployeeDialogState extends State<EmployeeDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _status,
+                      initialValue: _status,
                       decoration: const InputDecoration(labelText: 'الحالة الوظيفية'),
                       items: const [
                         DropdownMenuItem(value: 'نشط', child: Text('نشط في الدوام')),
@@ -210,7 +210,7 @@ class _EmployeeDialogState extends State<EmployeeDialog> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.1),
+                    color: AppColors.danger.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),

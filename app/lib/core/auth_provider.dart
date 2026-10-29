@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,10 +11,13 @@ class AuthProvider extends ChangeNotifier {
   static final AuthProvider instance = AuthProvider._();
   AuthProvider._();
 
+  static const Duration _profileRefreshInterval = Duration(minutes: 5);
+
   Map<String, dynamic>? _user;
   bool _isLoading = true;
   String? _announcementBanner;
   bool _isMaintenance = false;
+  Timer? _refreshTimer;
 
   String? _logoUrl;
   String _institutionName = AppConstants.institutionName;
@@ -34,8 +38,7 @@ class AuthProvider extends ChangeNotifier {
   String? get fullLogoUrl {
     if (_logoUrl == null || _logoUrl!.isEmpty) return null;
     if (_logoUrl!.startsWith('http://') || _logoUrl!.startsWith('https://')) return _logoUrl;
-    final base = ApiClient.instance.baseUrl.replaceAll('/api', '');
-    return '$base$_logoUrl';
+    return '${ApiClient.instance.serverOrigin}$_logoUrl';
   }
 
   // الرتب الحصرية
@@ -46,6 +49,9 @@ class AuthProvider extends ChangeNotifier {
   bool get canManageExclusions => isSuperAdmin || (_user != null && _user!['canManageExclusions'] == true);
   bool get canRecommit => isSuperAdmin || (_user != null && _user!['canRecommit'] == true);
 
+  /// Hint: كلمة المرور الحالية مؤقتة ويجب تغييرها قبل استخدام النظام
+  bool get mustChangePassword => _user != null && _user!['mustChangePassword'] == true;
+
   Future<void> init() async {
     _isLoading = true;
     notifyListeners();
@@ -53,9 +59,9 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString(AppConstants.userKey);
 
-    if (userJson != null) {
+    if (userJson != null && ApiClient.instance.token != null) {
       try {
-        _user = jsonDecode(userJson);
+        _user = Map<String, dynamic>.from(jsonDecode(userJson));
       } catch (_) {
         _user = null;
       }
@@ -66,18 +72,36 @@ class AuthProvider extends ChangeNotifier {
     _appTitle = prefs.getString('branding_app_title') ?? AppConstants.appTitle;
     _activeYear = prefs.getString('branding_active_year') ?? '2026';
 
-    // Hint: ربط معالج انتهاء الجلسة (401) لتسجيل الخروج تلقائياً
+    // Hint: ربط معالجات انتهاء الجلسة والصيانة وإلزام تغيير كلمة المرور القادمة من الخادم
     ApiClient.instance.onUnauthorized = () {
-      if (_user != null) {
-        logout();
+      if (_user != null) logout();
+    };
+    ApiClient.instance.onMaintenance = () {
+      if (!_isMaintenance) setMaintenanceMode(true);
+    };
+    ApiClient.instance.onPasswordChangeRequired = () {
+      if (_user != null && !mustChangePassword) {
+        updateUser({'mustChangePassword': true});
       }
     };
 
     _isLoading = false;
     notifyListeners();
 
-    // فحص صحة النظام وهوية المؤسسة في الخلفية
+    // فحص صحة النظام وهوية المؤسسة وتحديث صلاحيات المستخدم في الخلفية
     checkSystemStatus();
+    if (_user != null) {
+      refreshProfile();
+      _startProfileRefresh();
+    }
+  }
+
+  void _startProfileRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(_profileRefreshInterval, (_) {
+      refreshProfile();
+      checkSystemStatus();
+    });
   }
 
   Future<void> checkSystemStatus() async {
@@ -86,28 +110,27 @@ class AuthProvider extends ChangeNotifier {
       if (res != null) {
         _isMaintenance = res['isMaintenance'] == true;
         _announcementBanner = res['announcementBanner'];
-        if (res['logoUrl'] != null && res['logoUrl'].toString().isNotEmpty) {
-          _logoUrl = res['logoUrl'];
-        }
-        if (res['institutionName'] != null && res['institutionName'].toString().isNotEmpty) {
-          _institutionName = res['institutionName'];
-        }
-        if (res['appTitle'] != null && res['appTitle'].toString().isNotEmpty) {
-          _appTitle = res['appTitle'];
-        }
-        if (res['activeYear'] != null && res['activeYear'].toString().isNotEmpty) {
-          _activeYear = res['activeYear'].toString();
-        }
-
-        final prefs = await SharedPreferences.getInstance();
-        if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
-        await prefs.setString('branding_institution_name', _institutionName);
-        await prefs.setString('branding_app_title', _appTitle);
-        await prefs.setString('branding_active_year', _activeYear);
-
+        _applyBranding(res);
+        await _saveBranding();
         notifyListeners();
       }
     } catch (_) {}
+  }
+
+  void _applyBranding(Map<dynamic, dynamic> source) {
+    String? nonEmpty(dynamic v) => v != null && v.toString().isNotEmpty ? v.toString() : null;
+    _logoUrl = nonEmpty(source['logoUrl']) ?? _logoUrl;
+    _institutionName = nonEmpty(source['institutionName']) ?? _institutionName;
+    _appTitle = nonEmpty(source['appTitle']) ?? _appTitle;
+    _activeYear = nonEmpty(source['activeYear']) ?? _activeYear;
+  }
+
+  Future<void> _saveBranding() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
+    await prefs.setString('branding_institution_name', _institutionName);
+    await prefs.setString('branding_app_title', _appTitle);
+    await prefs.setString('branding_active_year', _activeYear);
   }
 
   Future<void> login(String username, String password) async {
@@ -116,46 +139,44 @@ class AuthProvider extends ChangeNotifier {
       'password': password,
     });
 
-    final token = res['token'];
-    _user = res['user'];
+    _user = Map<String, dynamic>.from(res['user']);
 
     final systemStatus = res['systemStatus'];
     if (systemStatus != null) {
       _announcementBanner = systemStatus['announcementBanner'];
       _isMaintenance = systemStatus['isMaintenance'] ?? false;
-      if (systemStatus['logoUrl'] != null && systemStatus['logoUrl'].toString().isNotEmpty) {
-        _logoUrl = systemStatus['logoUrl'];
-      }
-      if (systemStatus['institutionName'] != null && systemStatus['institutionName'].toString().isNotEmpty) {
-        _institutionName = systemStatus['institutionName'];
-      }
-      if (systemStatus['appTitle'] != null && systemStatus['appTitle'].toString().isNotEmpty) {
-        _appTitle = systemStatus['appTitle'];
-      }
-      if (systemStatus['activeYear'] != null && systemStatus['activeYear'].toString().isNotEmpty) {
-        _activeYear = systemStatus['activeYear'].toString();
-      }
+      _applyBranding(systemStatus);
     }
 
-    await ApiClient.instance.setToken(token);
+    await ApiClient.instance.setToken(res['token']);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(AppConstants.userKey, jsonEncode(_user));
-    if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
-    await prefs.setString('branding_institution_name', _institutionName);
-    await prefs.setString('branding_app_title', _appTitle);
-    await prefs.setString('branding_active_year', _activeYear);
+    await _saveBranding();
 
+    _startProfileRefresh();
     notifyListeners();
   }
 
+  /// Hint: تحديث بيانات المستخدم وصلاحياته من الخادم (يُستدعى دورياً وعند الإقلاع)
   Future<void> refreshProfile() async {
     try {
       final res = await ApiClient.instance.get('/auth/me');
-      if (res['user'] != null) {
-        updateUser(Map<String, dynamic>.from(res['user']));
+      if (res is Map && res['user'] != null) {
+        await updateUser(Map<String, dynamic>.from(res['user']));
       }
     } catch (_) {}
+  }
+
+  /// Hint: تطبيق نتيجة تحديث الملف الشخصي؛ عند تغيير كلمة المرور يُرجع الخادم رمز جلسة جديداً
+  Future<void> applyProfileUpdate(dynamic res) async {
+    if (res is! Map) return;
+    if (res['token'] is String) {
+      await ApiClient.instance.setToken(res['token']);
+    }
+    if (res['user'] is Map) {
+      await updateUser(Map<String, dynamic>.from(res['user']));
+    }
   }
 
   Future<void> updateUser(Map<String, dynamic> updated) async {
@@ -172,12 +193,7 @@ class AuthProvider extends ChangeNotifier {
     if (logoUrl != null) _logoUrl = logoUrl;
     if (institutionName != null && institutionName.isNotEmpty) _institutionName = institutionName;
     if (appTitle != null && appTitle.isNotEmpty) _appTitle = appTitle;
-
-    final prefs = await SharedPreferences.getInstance();
-    if (_logoUrl != null) await prefs.setString('branding_logo_url', _logoUrl!);
-    await prefs.setString('branding_institution_name', _institutionName);
-    await prefs.setString('branding_app_title', _appTitle);
-
+    await _saveBranding();
     notifyListeners();
   }
 
@@ -187,6 +203,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     _user = null;
     _announcementBanner = null;
     _isMaintenance = false;

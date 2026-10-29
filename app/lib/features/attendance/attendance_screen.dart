@@ -31,7 +31,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   // النقطة 8: متغيرات وضع المعاينة المؤقتة
   bool _isPreviewMode = false;
-  List<dynamic>? _previewPunches;
+  String? _previewId;
+  List<dynamic> _previewDays = [];
   String? _previewDate;
   bool _isCommitted = false;
   String? _committedByName;
@@ -47,7 +48,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _loadDepartments() async {
     try {
       final res = await ApiClient.instance.get('/employees/departments');
-      if (res is List) {
+      if (res is List && mounted) {
         setState(() {
           _allDepartments = res;
         });
@@ -77,6 +78,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
 
       final res = await ApiClient.instance.get(url);
+      if (!mounted) return;
       setState(() {
         _records = res['records'] ?? [];
         _isCommitted = res['isCommitted'] ?? false;
@@ -85,6 +87,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -92,21 +95,46 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  // تفعيل وضع المعاينة القادم من نافذة الرفع
+  // تفعيل وضع المعاينة القادم من نافذة الرفع (يوم واحد أو عدة أيام)
   void _onPreviewLoaded(Map<String, dynamic> previewData) {
+    final days = List<dynamic>.from(previewData['days'] ?? []);
+    if (!mounted) return;
     setState(() {
       _isPreviewMode = true;
-      _previewDate = previewData['date'];
-      _previewPunches = previewData['rawPunches'];
-      _records = previewData['records'] ?? [];
-      _isCommitted = previewData['isCommitted'] ?? false;
+      _previewId = previewData['previewId'];
+      _previewDays = days;
       _isLoading = false;
+    });
+    if (days.isNotEmpty) _selectPreviewDay(days.first['date']);
+
+    final invalidRows = previewData['invalidRows'] ?? 0;
+    if (days.length > 1 || invalidRows > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text(
+            (days.length > 1 ? 'يحتوي الملف على ${days.length} أيام، يرجى معاينة واعتماد كل يوم على حدة. ' : '') +
+                (invalidRows > 0 ? 'تم تجاهل $invalidRows صف بصيغة غير صالحة.' : ''),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _selectPreviewDay(String date) {
+    final day = _previewDays.firstWhere((d) => d['date'] == date, orElse: () => null);
+    if (day == null) return;
+    if (!mounted) return;
+    setState(() {
+      _previewDate = date;
+      _records = day['records'] ?? [];
+      _isCommitted = day['isCommitted'] ?? false;
     });
   }
 
-  // حفظ واعتماد الكشف المعاين
+  // حفظ واعتماد اليوم المعاين حالياً (بمعرف المعاينة المحفوظة في الخادم)
   Future<void> _commitPreviewedAttendance() async {
-    if (_previewDate == null || _previewPunches == null) return;
+    if (_previewDate == null || _previewId == null) return;
 
     final auth = AuthProvider.instance;
     if (_isCommitted && !auth.canRecommit) {
@@ -114,24 +142,69 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
+    final committedDate = _previewDate!;
     setState(() => _isLoading = true);
     try {
       await ApiClient.instance.post('/attendance/commit', {
-        'date': _previewDate,
-        'punchList': _previewPunches,
+        'previewId': _previewId,
+        'date': committedDate,
       });
+      if (!mounted) return;
 
-      setState(() => _isPreviewMode = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           backgroundColor: AppColors.onTime,
-          content: Text('تم اعتماد كشف تاريخ $_previewDate وحفظه رسمياً بنجاح!'),
+          content: Text('تم اعتماد كشف تاريخ $committedDate وحفظه رسمياً بنجاح!'),
         ),
       );
-      _loadDailyAttendance();
+
+      // Hint: إذا بقيت أيام غير معتمدة في نفس الملف ننتقل إليها، وإلا نعرض اليوم المعتمد
+      for (final d in _previewDays) {
+        if (d['date'] == committedDate) d['isCommitted'] = true;
+      }
+      final remaining = _previewDays.where((d) => d['isCommitted'] != true).toList();
+      if (remaining.isNotEmpty) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _selectPreviewDay(remaining.first['date']);
+      } else {
+        _selectedDate = DateTime.parse(committedDate);
+        _loadDailyAttendance();
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showErrorDialog('فشل الاعتماد', e.toString());
+    }
+  }
+
+  // إعادة احتساب يوم معتمد بقواعد يوم الاعتماد أو بالقواعد الحالية
+  Future<void> _recalculateDay(bool useCurrentRules) async {
+    final dateStr = DateFormatter.toYmd(_selectedDate);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إعادة احتساب اليوم'),
+        content: Text(useCurrentRules
+            ? 'سيُعاد احتساب كشف $dateStr وفق إعدادات الدوام الحالية، وقد تتغير نتائجه عن يوم الاعتماد. هل تريد المتابعة؟'
+            : 'سيُعاد احتساب كشف $dateStr بنفس قواعد يوم اعتماده (مع تطبيق الإجازات والعطل الحالية). هل تريد المتابعة؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إعادة الاحتساب')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiClient.instance.post('/attendance/recalculate', {'date': dateStr, 'useCurrentRules': useCurrentRules});
+      messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.onTime, content: Text('تمت إعادة احتساب اليوم بنجاح')));
+      _loadDailyAttendance();
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorDialog('تعذرت إعادة الاحتساب', e.toString());
     }
   }
 
@@ -143,7 +216,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           children: [
             const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
             const SizedBox(width: 8),
-            Text(title),
+            Expanded(child: Text(title)),
           ],
         ),
         content: Text(message),
@@ -158,6 +231,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   void _changeDate(int days) {
+    if (!mounted) return;
     setState(() {
       _selectedDate = _selectedDate.add(Duration(days: days));
     });
@@ -171,32 +245,31 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       firstDate: DateTime(2025),
       lastDate: DateTime(2030),
     );
-    if (picked != null && picked != _selectedDate) {
+    if (picked != null && picked != _selectedDate && mounted) {
       setState(() => _selectedDate = picked);
       _loadDailyAttendance();
     }
   }
 
-  // النقطة 4: تصدير الإكسل المباشر الفعال مع دعم فلاتر القسم والحالة
+  // تصدير الإكسل المباشر مع دعم فلاتر القسم والحالة (برابط تنزيل مؤقت)
   Future<void> _exportExcel() async {
-    final dateStr = _isPreviewMode ? (_previewDate ?? DateFormatter.toYmd(_selectedDate)) : DateFormatter.toYmd(_selectedDate);
-    final token = ApiClient.instance.token ?? '';
-    String url = '${ApiClient.instance.baseUrl}/reports/export-daily?date=$dateStr&token=$token';
-    if (_selectedDept != null && _selectedDept!.isNotEmpty) {
-      url += '&department=${Uri.encodeComponent(_selectedDept!)}';
+    if (_isPreviewMode) {
+      _showErrorDialog('التصدير غير متاح', 'لا يمكن تصدير كشف في وضع المعاينة؛ يرجى اعتماده أولاً.');
+      return;
     }
-    if (_selectedStatus != null && _selectedStatus!.isNotEmpty) {
-      url += '&status=${Uri.encodeComponent(_selectedStatus!)}';
-    }
-    final uri = Uri.parse(url);
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر فتح رابط تصدير الإكسل')),
-      );
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final url = await ApiClient.instance.downloadUrl('export-daily', {
+        'date': DateFormatter.toYmd(_selectedDate),
+        if (_selectedDept != null && _selectedDept!.isNotEmpty) 'department': _selectedDept,
+        if (_selectedStatus != null && _selectedStatus!.isNotEmpty) 'status': _selectedStatus,
+      });
+      final uri = Uri.parse(url);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        messenger.showSnackBar(const SnackBar(content: Text('تعذر فتح رابط تصدير الإكسل')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('تعذر التصدير: $e')));
     }
   }
 
@@ -249,7 +322,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                             style: TextStyle(fontSize: 12, color: isExcluded ? AppColors.danger : AppColors.onTime),
                           ),
                           value: isExcluded,
-                          activeColor: AppColors.danger,
+                          activeThumbColor: AppColors.danger,
                           onChanged: (val) async {
                             try {
                               await ApiClient.instance.put('/employees/departments/${dept['id']}/exclusion', {
@@ -261,6 +334,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                               _loadDepartments();
                               _loadDailyAttendance();
                             } catch (e) {
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('خطأ: $e')),
                               );
@@ -309,37 +383,74 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           // شريط المعاينة والاعتماد التحذيري البارز
           if (_isPreviewMode)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: Colors.amber.shade700,
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.visibility_rounded, color: Colors.white, size: 22),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'أنت الآن في وضع المعاينة المؤقتة لكشف تاريخ [$_previewDate] (لم يتم حفظه في القاعدة بعد ولن يظهر بالتقارير إلا بعد اعتماده)',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.visibility_rounded, color: Colors.white, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'وضع المعاينة المؤقتة لكشف تاريخ [$_previewDate]'
+                          '${_isCommitted ? ' (هذا اليوم معتمد مسبقاً وسيُعاد اعتماده)' : ' (لم يُحفظ بعد ولن يظهر بالتقارير إلا بعد اعتماده)'}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ],
                   ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.onTime,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  if (_previewDays.length > 1) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final d in _previewDays)
+                          ChoiceChip(
+                            label: Text('${d['date']}${d['isCommitted'] == true ? ' ✓' : ''}'),
+                            selected: d['date'] == _previewDate,
+                            onSelected: (_) => _selectPreviewDay(d['date']),
+                          ),
+                      ],
                     ),
-                    icon: const Icon(Icons.check_circle_rounded, size: 18),
-                    label: const Text('حفظ واعتماد الكشف الآن', style: TextStyle(fontWeight: FontWeight.bold)),
-                    onPressed: _commitPreviewedAttendance,
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: Colors.white),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('إلغاء المعاينة'),
-                    onPressed: () {
-                      setState(() => _isPreviewMode = false);
-                      _loadDailyAttendance();
-                    },
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.onTime,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.check_circle_rounded, size: 18),
+                        label: Text(
+                          _previewDays.length > 1 ? 'اعتماد يوم $_previewDate' : 'حفظ واعتماد الكشف الآن',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: _isLoading ? null : _commitPreviewedAttendance,
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.white),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        label: const Text('إنهاء المعاينة'),
+                        onPressed: () {
+                          if (!mounted) return;
+                          setState(() {
+                            _isPreviewMode = false;
+                            _previewId = null;
+                            _previewDays = [];
+                          });
+                          _loadDailyAttendance();
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -349,17 +460,29 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           if (!_isPreviewMode && _isCommitted)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              color: AppColors.onTime.withOpacity(0.12),
+              color: AppColors.onTime.withValues(alpha: 0.12),
               child: Row(
                 children: [
                   const Icon(Icons.verified_rounded, color: AppColors.onTime, size: 18),
                   const SizedBox(width: 8),
-                  Text(
-                    'هذا الكشف معتمد رسمياً' +
-                        (_committedByName != null ? ' بواسطة [$_committedByName]' : '') +
-                        (_committedAt != null ? ' بتاريخ $_committedAt' : ''),
-                    style: const TextStyle(color: AppColors.onTime, fontWeight: FontWeight.bold, fontSize: 12),
+                  Expanded(
+                    child: Text(
+                      'هذا الكشف معتمد رسمياً'
+                      '${_committedByName != null ? ' بواسطة [$_committedByName]' : ''}'
+                      '${_committedAt != null ? ' بتاريخ ${DateFormatter.dbTimestampToLocal(_committedAt)}' : ''}',
+                      style: const TextStyle(color: AppColors.onTime, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
                   ),
+                  if (AuthProvider.instance.canRecommit)
+                    PopupMenuButton<bool>(
+                      tooltip: 'إعادة احتساب اليوم',
+                      icon: const Icon(Icons.refresh_rounded, color: AppColors.onTime, size: 20),
+                      onSelected: _recalculateDay,
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: false, child: Text('إعادة احتساب بنفس قواعد يوم الاعتماد')),
+                        PopupMenuItem(value: true, child: Text('إعادة احتساب بالقواعد الحالية')),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -369,7 +492,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardTheme.color ?? Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
+              border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
             ),
             child: Wrap(
               spacing: 10,
@@ -392,7 +515,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.navy.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.navy.withValues(alpha: 0.3)),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -417,20 +540,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ),
 
                 // أزرار العمليات الرئيسية
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     // زر استثناء الأقسام
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.navy,
-                        side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                        side: BorderSide(color: AppColors.navy.withValues(alpha: 0.4)),
                       ),
                       icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
                       label: const Text('استثناء أقسام'),
                       onPressed: _showExcludeDeptsDialog,
                     ),
-                    const SizedBox(width: 8),
 
                     // زر تصدير الإكسل
                     ElevatedButton.icon(
@@ -442,7 +565,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       label: const Text('تصدير إكسل'),
                       onPressed: _exportExcel,
                     ),
-                    const SizedBox(width: 8),
 
                     // زر رفع الكشف اليومي
                     ElevatedButton.icon(
@@ -471,7 +593,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           // شريط الفلاتر والبحث
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Theme.of(context).cardTheme.color?.withOpacity(0.5) ?? Colors.grey.shade50,
+            color: Theme.of(context).cardTheme.color?.withValues(alpha: 0.5) ?? Colors.grey.shade50,
             child: Wrap(
               spacing: 12,
               runSpacing: 10,
@@ -498,7 +620,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   width: 200,
                   height: 38,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedDept,
+                    initialValue: _selectedDept,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -523,7 +645,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   width: 170,
                   height: 38,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedStatus,
+                    initialValue: _selectedStatus,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -581,46 +703,47 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                               final statusColor = AppConstants.getStatusColor(status);
 
                               return Container(
-                                color: index % 2 == 0 ? Colors.transparent : Colors.grey.withOpacity(0.02),
+                                color: index % 2 == 0 ? Colors.transparent : Colors.grey.withValues(alpha: 0.02),
                                 child: ListTile(
                                   dense: true,
                                   leading: CircleAvatar(
                                     radius: 18,
-                                    backgroundColor: statusColor.withOpacity(0.12),
+                                    backgroundColor: statusColor.withValues(alpha: 0.12),
                                     child: Text(
                                       '${r['emp_code'] ?? r['empCode'] ?? ''}',
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: statusColor),
                                     ),
                                   ),
-                                  title: Row(
-                                    children: [
-                                      Text(
-                                        r['name'] ?? '',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '(${r['department'] ?? ''})',
-                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                      ),
-                                    ],
+                                  title: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: r['name'] ?? '',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                        TextSpan(
+                                          text: '  (${r['department'] ?? ''})',
+                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  subtitle: Row(
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'الدخول: ${DateFormatter.formatTime12h(r['first_punch'] ?? r['firstPunch'])}  |  الخروج: ${DateFormatter.formatTime12h(r['last_punch'] ?? r['lastPunch'])}',
                                         style: const TextStyle(fontSize: 12),
                                       ),
-                                      if (r['notes'] != null && r['notes'].toString().isNotEmpty) ...[
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            '• ${r['notes']}',
-                                            style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                      if (r['notes'] != null && r['notes'].toString().isNotEmpty)
+                                        Text(
+                                          '• ${r['notes']}',
+                                          style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      ],
                                     ],
                                   ),
                                   trailing: StatusBadge(status: status),

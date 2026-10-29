@@ -3,6 +3,7 @@ import '../../core/api_client.dart';
 import '../../core/auth_provider.dart';
 import '../../core/theme.dart';
 import '../../tools/date_formatter.dart';
+import 'widgets/template_dialogs.dart';
 
 /// Hint: شاشة جداول الدوام والشفتات وأيام الراحة الأسبوعية (النقطة 17)
 /// تدعم قوالب الدوام، التخصيص اليدوي الحر للأيام، الجداول الأسبوعية والثابتة، ونسخ الأسبوع السابق
@@ -25,7 +26,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   String? _selectedDept;
   final Set<int> _selectedEmployeeIds = {};
 
-  static const List<String> _dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  static const List<String> _dayNames = scheduleDayNames;
 
   static DateTime _getSunday(DateTime d) {
     return d.subtract(Duration(days: d.weekday % 7));
@@ -57,6 +58,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   Future<void> _loadTemplates() async {
     final res = await ApiClient.instance.get('/schedules/templates');
     if (res is List) {
+      if (!mounted) return;
       setState(() {
         _templates = res;
       });
@@ -66,6 +68,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   Future<void> _loadDepartments() async {
     final res = await ApiClient.instance.get('/employees/departments');
     if (res is List) {
+      if (!mounted) return;
       setState(() {
         _departments = res.where((d) => d['is_excluded'] == 0).toList();
       });
@@ -102,6 +105,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   }
 
   void _changeWeek(int deltaWeeks) {
+    if (!mounted) return;
     setState(() {
       _weekStartDate = _weekStartDate.add(Duration(days: deltaWeeks * 7));
     });
@@ -136,6 +140,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
 
     if (confirm != true) return;
 
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final res = await ApiClient.instance.post('/schedules/copy-previous-week', {
@@ -226,7 +231,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
-                                color: scheduleType == 'WEEKLY' ? AppColors.navy.withOpacity(0.08) : Colors.transparent,
+                                color: scheduleType == 'WEEKLY' ? AppColors.navy.withValues(alpha: 0.08) : Colors.transparent,
                                 border: Border.all(
                                   color: scheduleType == 'WEEKLY' ? AppColors.navy : Colors.grey.shade300,
                                   width: scheduleType == 'WEEKLY' ? 1.5 : 1,
@@ -261,7 +266,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
-                                color: scheduleType == 'FIXED' ? AppColors.navy.withOpacity(0.08) : Colors.transparent,
+                                color: scheduleType == 'FIXED' ? AppColors.navy.withValues(alpha: 0.08) : Colors.transparent,
                                 border: Border.all(
                                   color: scheduleType == 'FIXED' ? AppColors.navy : Colors.grey.shade300,
                                   width: scheduleType == 'FIXED' ? 1.5 : 1,
@@ -311,7 +316,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                   color: !isCustom ? Colors.white : Colors.transparent,
                                   borderRadius: BorderRadius.circular(6),
                                   boxShadow: !isCustom
-                                      ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 1))]
+                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))]
                                       : null,
                                 ),
                                 alignment: Alignment.center,
@@ -336,7 +341,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                   color: isCustom ? Colors.white : Colors.transparent,
                                   borderRadius: BorderRadius.circular(6),
                                   boxShadow: isCustom
-                                      ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 1))]
+                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))]
                                       : null,
                                 ),
                                 alignment: Alignment.center,
@@ -361,7 +366,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                       const Text('اختر قالب الدوام المطلوب:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<int>(
-                        value: selectedTemplateId,
+                        initialValue: selectedTemplateId,
                         isExpanded: true,
                         decoration: InputDecoration(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -387,7 +392,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: AppColors.onTime.withOpacity(0.12),
+                                  color: AppColors.onTime.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text('دوام: $workCount', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.onTime)),
@@ -548,7 +553,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.onTime, foregroundColor: Colors.white),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('إضافة قالب جديد'),
-                  onPressed: () => _showTemplateEditorDialog(
+                  onPressed: () => showTemplateEditorDialog(context, 
                     onSaved: () async {
                       await _loadTemplates();
                       setDialogState(() {});
@@ -577,7 +582,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: AppColors.navy.withOpacity(0.08),
+                                  color: AppColors.navy.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text('${workDays.length} أيام دوام', style: const TextStyle(fontSize: 10, color: AppColors.navy)),
@@ -611,7 +616,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                               IconButton(
                                 icon: const Icon(Icons.edit_rounded, size: 18, color: AppColors.navy),
                                 tooltip: 'تعديل القالب',
-                                onPressed: () => _showTemplateEditorDialog(
+                                onPressed: () => showTemplateEditorDialog(context, 
                                   template: t,
                                   onSaved: () async {
                                     await _loadTemplates();
@@ -622,7 +627,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.danger),
                                 tooltip: 'حذف القالب',
-                                onPressed: () => _deleteTemplate(
+                                onPressed: () => deleteTemplateWithConfirm(context, 
                                   t['id'],
                                   t['name'],
                                   onDeleted: () async {
@@ -646,161 +651,6 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
     );
   }
 
-  // نافذة إنشاء أو تعديل قالب دوام
-  void _showTemplateEditorDialog({Map<String, dynamic>? template, required VoidCallback onSaved}) {
-    final bool isEdit = template != null;
-    final nameController = TextEditingController(text: isEdit ? template['name'] : '');
-    final Set<int> workDays = isEdit && template['workDays'] != null
-        ? (template['workDays'] as List<dynamic>).map<int>((e) => (e as num).toInt()).toSet()
-        : {0, 1, 2, 3, 4}; // افتراضي 5 أيام
-
-    final messenger = ScaffoldMessenger.of(context);
-
-    showDialog(
-      context: context,
-      builder: (dlgCtx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) {
-          return AlertDialog(
-            title: Text(isEdit ? 'تعديل قالب الدوام' : 'إضافة قالب دوام جديد'),
-            content: SizedBox(
-              width: 480,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: 'اسم القالب *',
-                      hintText: 'مثال: شفت حراسة ليلي 4 أيام...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('أيام الدوام في هذا القالب:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (int i = 0; i < 7; i++) ...[
-                        Builder(
-                          builder: (context) {
-                            final isSelected = workDays.contains(i);
-                            return FilterChip(
-                              label: Text(_dayNames[i]),
-                              selected: isSelected,
-                              selectedColor: AppColors.onTime,
-                              checkmarkColor: Colors.white,
-                              labelStyle: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isSelected ? Colors.white : Colors.black87,
-                              ),
-                              onSelected: (val) {
-                                setDialogState(() {
-                                  if (val) {
-                                    workDays.add(i);
-                                  } else {
-                                    workDays.remove(i);
-                                  }
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'أيام الدوام المحددة: ${workDays.length} | أيام الراحة: ${7 - workDays.length}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.navy),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('إلغاء')),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
-                onPressed: () async {
-                  final name = nameController.text.trim();
-                  if (name.isEmpty) {
-                    messenger.showSnackBar(const SnackBar(content: Text('يرجى إدخال اسم القالب')));
-                    return;
-                  }
-
-                  Navigator.pop(dlgCtx);
-                  try {
-                    if (isEdit) {
-                      await ApiClient.instance.put('/schedules/templates/${template['id']}', {
-                        'name': name,
-                        'workDays': workDays.toList()..sort(),
-                      });
-                    } else {
-                      await ApiClient.instance.post('/schedules/templates', {
-                        'name': name,
-                        'workDays': workDays.toList()..sort(),
-                      });
-                    }
-
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(
-                        backgroundColor: AppColors.onTime,
-                        content: Text(isEdit ? 'تم تعديل القالب بنجاح!' : 'تم إنشاء قالب الدوام بنجاح!'),
-                      ),
-                    );
-                    onSaved();
-                  } catch (e) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(backgroundColor: AppColors.danger, content: Text('خطأ: $e')),
-                    );
-                  }
-                },
-                child: Text(isEdit ? 'حفظ التعديلات' : 'إضافة القالب'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  // حذف قالب
-  Future<void> _deleteTemplate(int id, String name, {required VoidCallback onDeleted}) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف قالب الدوام [$name]؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dlgCtx, false), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(dlgCtx, true),
-            child: const Text('حذف'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      await ApiClient.instance.delete('/schedules/templates/$id');
-      if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم حذف القالب بنجاح')));
-      onDeleted();
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text('فشل الحذف: $e')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -811,7 +661,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardTheme.color ?? Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
+              border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
             ),
             child: Wrap(
               spacing: 12,
@@ -831,7 +681,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.navy.withOpacity(0.3)),
+                        border: Border.all(color: AppColors.navy.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -862,7 +712,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.navy,
-                          side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                          side: BorderSide(color: AppColors.navy.withValues(alpha: 0.4)),
                         ),
                         icon: const Icon(Icons.dashboard_customize_rounded, size: 16),
                         label: const Text('إدارة قوالب الدوام'),
@@ -873,7 +723,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.navy,
-                        side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                        side: BorderSide(color: AppColors.navy.withValues(alpha: 0.4)),
                       ),
                       icon: const Icon(Icons.copy_all_rounded, size: 16),
                       label: const Text('نسخ الأسبوع السابق'),
@@ -898,14 +748,14 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
           // شريط الفلترة
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Theme.of(context).cardTheme.color?.withOpacity(0.5) ?? Colors.grey.shade50,
+            color: Theme.of(context).cardTheme.color?.withValues(alpha: 0.5) ?? Colors.grey.shade50,
             child: Row(
               children: [
                 SizedBox(
                   width: 220,
                   height: 38,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedDept,
+                    initialValue: _selectedDept,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -920,6 +770,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                           )),
                     ],
                     onChanged: (val) {
+                      if (!mounted) return;
                       setState(() => _selectedDept = val);
                       _loadAssignments();
                     },
@@ -933,6 +784,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                   ),
                   label: const Text('تحديد الكل'),
                   onPressed: () {
+                    if (!mounted) return;
                     setState(() {
                       if (_selectedEmployeeIds.length == _assignments.length) {
                         _selectedEmployeeIds.clear();
@@ -970,12 +822,13 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                               final List<dynamic> offDays = a['offDays'] ?? [];
 
                               return Container(
-                                color: isSelected ? AppColors.navy.withOpacity(0.04) : Colors.transparent,
+                                color: isSelected ? AppColors.navy.withValues(alpha: 0.04) : Colors.transparent,
                                 child: ListTile(
                                   dense: true,
                                   leading: Checkbox(
                                     value: isSelected,
                                     onChanged: (val) {
+                                      if (!mounted) return;
                                       setState(() {
                                         if (val == true) {
                                           _selectedEmployeeIds.add(empId);
@@ -997,7 +850,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: a['activeType'] == 'WEEKLY' ? AppColors.goldBright.withOpacity(0.2) : Colors.grey.shade200,
+                                          color: a['activeType'] == 'WEEKLY' ? AppColors.goldBright.withValues(alpha: 0.2) : Colors.grey.shade200,
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
@@ -1035,7 +888,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                             margin: const EdgeInsets.only(left: 4),
                                             decoration: BoxDecoration(
                                               color: workDays.contains(i)
-                                                  ? AppColors.onTime.withOpacity(0.12)
+                                                  ? AppColors.onTime.withValues(alpha: 0.12)
                                                   : Colors.grey.shade200,
                                               borderRadius: BorderRadius.circular(4),
                                               border: Border.all(

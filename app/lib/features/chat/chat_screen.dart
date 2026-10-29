@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../tools/date_formatter.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 
@@ -35,6 +36,9 @@ class _ChatScreenState extends State<ChatScreen> {
   String _activeTitle = 'اختر محادثة للبدء';
 
   List<dynamic> _messages = [];
+  static const int _pageSize = 150;
+  bool _hasOlder = false;
+  bool _isLoadingOlder = false;
 
   @override
   void initState() {
@@ -108,6 +112,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _messages = res is List ? res : [];
+          // Hint: الخادم يرجع أحدث 150 رسالة؛ إذا اكتملت الصفحة فقد توجد رسائل أقدم
+          _hasOlder = _messages.length >= _pageSize;
           _isLoadingMessages = false;
         });
         _scrollToBottom();
@@ -115,6 +121,37 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       if (mounted) setState(() => _isLoadingMessages = false);
     }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (_currentTargetId == null || _messages.isEmpty || _isLoadingOlder) return;
+    setState(() => _isLoadingOlder = true);
+    try {
+      String url = '/chat/messages?type=$_currentType&targetId=$_currentTargetId&beforeId=${_messages.first['id']}';
+      if (_currentType == 'SURVEILLANCE' && _surveillanceUser2Id != null) {
+        url += '&user2Id=$_surveillanceUser2Id';
+      }
+      final res = await ApiClient.instance.get(url);
+      if (!mounted) return;
+      final older = res is List ? res : [];
+      setState(() {
+        _messages.insertAll(0, older);
+        _hasOlder = older.length >= _pageSize;
+        _isLoadingOlder = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingOlder = false);
+    }
+  }
+
+  // Hint: إضافة رسائل جديدة دون تكرار (قد تصل نفس الرسالة من الإرسال ومن الاستطلاع الدوري)
+  void _appendMessages(List<dynamic> incoming) {
+    final known = _messages.map((m) => m['id']).toSet();
+    final fresh = incoming.where((m) => !known.contains(m['id'])).toList();
+    if (fresh.isEmpty) return;
+    if (!mounted) return;
+    setState(() => _messages.addAll(fresh));
+    _scrollToBottom();
   }
 
   Future<void> _pollActiveConversation() async {
@@ -132,10 +169,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final res = await ApiClient.instance.get(url);
       if (res is List && res.isNotEmpty && mounted) {
-        setState(() {
-          _messages.addAll(res);
-        });
-        _scrollToBottom();
+        _appendMessages(res);
       }
     } catch (_) {}
   }
@@ -167,15 +201,18 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       if (mounted) {
-        setState(() {
-          _messages.add(res);
-          _isSending = false;
-        });
-        _scrollToBottom();
+        setState(() => _isSending = false);
+        _appendMessages([res]);
         _loadConversations();
       }
-    } catch (_) {
-      if (mounted) setState(() => _isSending = false);
+    } catch (e) {
+      if (!mounted) return;
+      // Hint: إرجاع نص الرسالة عند الفشل حتى لا يضيع ما كتبه المستخدم
+      _msgController.text = text;
+      setState(() => _isSending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.danger, content: Text('تعذر إرسال الرسالة: $e')),
+      );
     }
   }
 
@@ -287,6 +324,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
                         if (context.mounted) Navigator.pop(context, true);
                       } catch (e) {
+                        if (!context.mounted) return;
                         setDlgState(() {
                           isVerifying = false;
                           errorMsg = 'كلمة المرور غير صحيحة، يرجى المحاولة ثانية';
@@ -324,6 +362,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
                           if (context.mounted) Navigator.pop(context, true);
                         } catch (e) {
+                          if (!context.mounted) return;
                           setDlgState(() {
                             isVerifying = false;
                             errorMsg = 'كلمة المرور غير صحيحة، يرجى المحاولة ثانية';
@@ -413,15 +452,17 @@ class _ChatScreenState extends State<ChatScreen> {
                   final groupName = nameController.text.trim();
                   if (groupName.isEmpty) return;
 
+                  final navigator = Navigator.of(ctx);
+                  final messenger = ScaffoldMessenger.of(context);
                   try {
                     await ApiClient.instance.post('/chat/groups', {
                       'name': groupName,
                       'memberIds': selectedUserIds.toList(),
                     });
-                    Navigator.pop(ctx);
+                    navigator.pop();
                     _loadConversations();
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                    messenger.showSnackBar(SnackBar(content: Text('خطأ: $e')));
                   }
                 },
                 child: const Text('إنشاء المجموعة'),
@@ -446,7 +487,7 @@ class _ChatScreenState extends State<ChatScreen> {
             width: 320,
             decoration: BoxDecoration(
               color: Theme.of(context).cardTheme.color ?? Colors.white,
-              border: Border(left: BorderSide(color: Colors.grey.withOpacity(0.15))),
+              border: Border(left: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
             ),
             child: Column(
               children: [
@@ -487,7 +528,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ListTile(
                                   dense: true,
                                   selected: _currentType == 'GROUP' && _currentTargetId == g['id'],
-                                  selectedTileColor: AppColors.navy.withOpacity(0.08),
+                                  selectedTileColor: AppColors.navy.withValues(alpha: 0.08),
                                   leading: const CircleAvatar(
                                     radius: 16,
                                     backgroundColor: AppColors.gold,
@@ -508,10 +549,10 @@ class _ChatScreenState extends State<ChatScreen> {
                               ListTile(
                                 dense: true,
                                 selected: _currentType == 'DIRECT' && _currentTargetId == u['id'],
-                                selectedTileColor: AppColors.navy.withOpacity(0.08),
+                                selectedTileColor: AppColors.navy.withValues(alpha: 0.08),
                                 leading: CircleAvatar(
                                   radius: 16,
-                                  backgroundColor: AppColors.navy.withOpacity(0.12),
+                                  backgroundColor: AppColors.navy.withValues(alpha: 0.12),
                                   child: Text(
                                     (u['name'] ?? 'U').substring(0, 1),
                                     style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.navy, fontSize: 12),
@@ -539,13 +580,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                   decoration: BoxDecoration(
                                     color: _isSurveillanceExpanded
-                                        ? AppColors.danger.withOpacity(0.08)
-                                        : Colors.grey.withOpacity(0.05),
+                                        ? AppColors.danger.withValues(alpha: 0.08)
+                                        : Colors.grey.withValues(alpha: 0.05),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
                                       color: _isSurveillanceExpanded
-                                          ? AppColors.danger.withOpacity(0.2)
-                                          : Colors.grey.withOpacity(0.2),
+                                          ? AppColors.danger.withValues(alpha: 0.2)
+                                          : Colors.grey.withValues(alpha: 0.2),
                                     ),
                                   ),
                                   child: Row(
@@ -595,7 +636,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       selected: _currentType == 'SURVEILLANCE' &&
                                           _currentTargetId == p['user1']['id'] &&
                                           _surveillanceUser2Id == p['user2']['id'],
-                                      selectedTileColor: AppColors.danger.withOpacity(0.08),
+                                      selectedTileColor: AppColors.danger.withValues(alpha: 0.08),
                                       leading: const Icon(Icons.remove_red_eye_rounded, size: 18, color: AppColors.late),
                                       title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                       subtitle: Text(p['lastMessage'] ?? '', style: const TextStyle(fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -624,7 +665,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardTheme.color ?? Colors.white,
-                    border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
+                    border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
                   ),
                   child: Row(
                     children: [
@@ -654,8 +695,20 @@ class _ChatScreenState extends State<ChatScreen> {
                           : ListView.builder(
                               controller: _scrollController,
                               padding: const EdgeInsets.all(16),
-                              itemCount: _messages.length,
-                              itemBuilder: (context, index) {
+                              itemCount: _messages.length + (_hasOlder ? 1 : 0),
+                              itemBuilder: (context, rawIndex) {
+                                if (_hasOlder && rawIndex == 0) {
+                                  return Center(
+                                    child: TextButton.icon(
+                                      onPressed: _isLoadingOlder ? null : _loadOlderMessages,
+                                      icon: _isLoadingOlder
+                                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                          : const Icon(Icons.history_rounded, size: 16),
+                                      label: const Text('تحميل رسائل أقدم'),
+                                    ),
+                                  );
+                                }
+                                final index = _hasOlder ? rawIndex - 1 : rawIndex;
                                 final msg = _messages[index];
                                 final isMe = msg['sender_id'] == auth.user?['id'];
 
@@ -683,7 +736,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          (msg['created_at'] ?? '').toString().split(' ').last.substring(0, 5),
+                                          DateFormatter.dbTimestampToLocal(msg['created_at']).split(' ').skip(1).join(' '),
                                           style: TextStyle(color: isMe ? Colors.white70 : Colors.grey, fontSize: 10),
                                         ),
                                       ],
@@ -700,7 +753,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardTheme.color ?? Colors.white,
-                      border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.15))),
+                      border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
                     ),
                     child: Row(
                       children: [

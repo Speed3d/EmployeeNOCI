@@ -154,22 +154,25 @@ class _MainLayoutState extends State<MainLayout> {
                   const SizedBox(width: 8),
                 ],
 
-                // العنوان
-                Text(
-                  widget.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                // العنوان (يُختصر على الشاشات الضيقة بدل أن يخرج عن الشاشة)
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: Responsive.isMobile(context) ? 15 : 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-
-                const Spacer(),
+                const SizedBox(width: 8),
 
                 // Hint: شارة السنة النشطة المرتبطة ديناميكياً بإعدادات النظام
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.navy.withOpacity(0.1),
+                    color: AppColors.navy.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -188,12 +191,12 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                 ),
 
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
 
                 // أزرار العمليات الإضافية من الشاشة
                 if (widget.actions != null) ...widget.actions!,
 
-                const SizedBox(width: 12),
+                const SizedBox(width: 4),
 
                 // اسم وصورة المستخدم (قابل للنقر لفتح الملف الشخصي - النقطة 14)
                 InkWell(
@@ -211,9 +214,9 @@ class _MainLayoutState extends State<MainLayout> {
                       children: [
                         CircleAvatar(
                           radius: 17,
-                          backgroundColor: AppColors.navy.withOpacity(0.12),
+                          backgroundColor: AppColors.navy.withValues(alpha: 0.12),
                           backgroundImage: auth.user?['avatarUrl'] != null && auth.user!['avatarUrl'].toString().isNotEmpty
-                              ? NetworkImage('${ApiClient.instance.baseUrl.replaceAll('/api', '')}${auth.user!['avatarUrl']}')
+                              ? NetworkImage('${ApiClient.instance.serverOrigin}${auth.user!['avatarUrl']}')
                               : null,
                           child: (auth.user?['avatarUrl'] == null || auth.user!['avatarUrl'].toString().isEmpty)
                               ? Text(
@@ -239,7 +242,7 @@ class _MainLayoutState extends State<MainLayout> {
                                 auth.isSuperAdmin ? 'سوبر أدمن' : 'مدخل بيانات',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
+                                  color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
@@ -330,7 +333,7 @@ class _MainLayoutState extends State<MainLayout> {
                           child: Image.network(
                             AuthProvider.instance.fullLogoUrl!,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.security_rounded, color: AppColors.goldBright, size: 22),
+                            errorBuilder: (_, _, _) => const Icon(Icons.security_rounded, color: AppColors.goldBright, size: 22),
                           ),
                         )
                       : const Icon(Icons.security_rounded, color: AppColors.goldBright, size: 22),
@@ -342,7 +345,7 @@ class _MainLayoutState extends State<MainLayout> {
                     children: [
                       Text(
                         AuthProvider.instance.institutionName,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 14,
@@ -353,7 +356,7 @@ class _MainLayoutState extends State<MainLayout> {
                       const SizedBox(height: 2),
                       Text(
                         AuthProvider.instance.appTitle,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 10, color: Colors.grey),
                       ),
@@ -386,7 +389,7 @@ class _MainLayoutState extends State<MainLayout> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       selected: isSelected,
-                      selectedTileColor: AppColors.navy.withOpacity(0.08),
+                      selectedTileColor: AppColors.navy.withValues(alpha: 0.08),
                       leading: Icon(
                         item.icon,
                         size: 20,

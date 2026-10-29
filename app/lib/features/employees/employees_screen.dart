@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../core/api_client.dart';
+import '../../tools/date_formatter.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 import '../../core/constants.dart';
 import 'employee_dialog.dart';
+import '../settings/widgets/color_setting_item.dart';
 
 /// Hint: شاشة إدارة سجلات الموظفين ودليل المقر ونقل الموظفين (النقطة 16)
 class EmployeesScreen extends StatefulWidget {
@@ -21,6 +23,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   List<dynamic> _departments = [];
   String _searchQuery = '';
   String? _selectedDept;
+  bool _showDeleted = false;
 
   // ألوان تمييز حالات الموظفين القابلة للتخصيص من الإعدادات
   Color _colorActiveLeave = const Color(0xFFE3F2FD); // أزرق فاتح
@@ -28,16 +31,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Color _colorTerminated = const Color(0xFFFFCDD2);  // أحمر فاتح واضح
   Color _colorVipExempt = const Color(0xFFECEFF1);   // رمادي فاتح
 
-  static Color parseHex(String? hex, Color fallback) {
-    if (hex == null || hex.isEmpty) return fallback;
-    try {
-      String clean = hex.replaceAll('#', '').trim();
-      if (clean.length == 6) clean = 'FF$clean';
-      return Color(int.parse(clean, radix: 16));
-    } catch (_) {
-      return fallback;
-    }
-  }
 
   @override
   void initState() {
@@ -52,10 +45,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       final res = await ApiClient.instance.get('/settings');
       if (res is Map && mounted) {
         setState(() {
-          _colorActiveLeave = parseHex(res['color_active_leave'], const Color(0xFFE8F1FC));
-          _colorSeconded = parseHex(res['color_seconded'], const Color(0xFFFFF3E0));
-          _colorTerminated = parseHex(res['color_terminated'], const Color(0xFFFFEBEE));
-          _colorVipExempt = parseHex(res['color_vip_exempt'], const Color(0xFFECEFF1));
+          _colorActiveLeave = parseHexColor(res['color_active_leave'], const Color(0xFFE8F1FC));
+          _colorSeconded = parseHexColor(res['color_seconded'], const Color(0xFFFFF3E0));
+          _colorTerminated = parseHexColor(res['color_terminated'], const Color(0xFFFFEBEE));
+          _colorVipExempt = parseHexColor(res['color_vip_exempt'], const Color(0xFFECEFF1));
         });
       }
     } catch (_) {}
@@ -64,7 +57,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Future<void> _loadDepartments() async {
     try {
       final res = await ApiClient.instance.get('/employees/departments');
-      if (res is List) {
+      if (res is List && mounted) {
         setState(() {
           _departments = res;
         });
@@ -86,13 +79,18 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       if (_selectedDept != null && _selectedDept!.isNotEmpty) {
         url += 'department=${Uri.encodeComponent(_selectedDept!)}&';
       }
+      if (_showDeleted) {
+        url += 'includeDeleted=true&';
+      }
 
       final res = await ApiClient.instance.get(url);
+      if (!mounted) return;
       setState(() {
         _employees = res is List ? res : [];
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -133,7 +131,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   const Text('القسم الجديد المراد النقل إليه:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: targetDept,
+                    initialValue: targetDept,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -200,33 +198,65 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
   }
 
-  // استيراد الموظفين من ملف الإكسل الأساسي
+  // استيراد الموظفين من ملف الإكسل الأساسي مع عرض ملخص تفصيلي للنتيجة
   Future<void> _importMasterEmployees() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
       );
+      if (files.isEmpty || !mounted) return;
 
-      if (files.isNotEmpty) {
-        final file = files.first;
-        final bytes = await file.xFile.readAsBytes();
+      final file = files.first;
+      final bytes = await file.xFile.readAsBytes();
 
-        setState(() => _isLoading = true);
-        final res = await ApiClient.instance.uploadFile('/employees/import-excel', bytes, file.name);
+      setState(() => _isLoading = true);
+      final res = await ApiClient.instance.uploadFile('/employees/import-excel', bytes, file.name);
+      if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.onTime,
-            content: Text(res['message'] ?? 'تم استيراد الموظفين بنجاح!'),
+      _loadDepartments();
+      _loadEmployees();
+
+      final List<dynamic> missing = res['missingFromFile'] ?? [];
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('نتيجة استيراد ملف الموظفين'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('عدد الموظفين في الملف: ${res['count'] ?? 0}'),
+                  Text('موظفون جدد: ${res['added'] ?? 0}'),
+                  Text('بيانات محدّثة: ${res['updated'] ?? 0}'),
+                  Text('منقولون بين الأقسام (مسجلون في سجل التنقلات): ${res['transferred'] ?? 0}'),
+                  Text('بلا تغيير: ${res['unchanged'] ?? 0}'),
+                  if ((res['restored'] ?? 0) > 0) Text('مستعادون من الأرشيف: ${res['restored']}'),
+                  const SizedBox(height: 12),
+                  Text(
+                    missing.isEmpty
+                        ? 'كل موظفي النظام موجودون في الملف.'
+                        : 'موظفون في النظام غير موجودين في الملف (${missing.length}) — لم يتم تعديلهم:',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  for (final m in missing.take(50))
+                    Text('• [${m['emp_code']}] ${m['name']} (${m['department']})', style: const TextStyle(fontSize: 12)),
+                  if (missing.length > 50) Text('... و ${missing.length - 50} آخرون', style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
           ),
-        );
-        _loadDepartments();
-        _loadEmployees();
-      }
+          actions: [ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('حسناً'))],
+        ),
+      );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(backgroundColor: AppColors.danger, content: Text('فشل الاستيراد: $e')),
       );
     }
@@ -245,12 +275,18 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
   }
 
+  // Hint: الحذف أرشفة: يختفي الموظف من القوائم والكشوفات الجديدة ويبقى تاريخه في التقارير، ويمكن استعادته
   Future<void> _deleteEmployee(Map<String, dynamic> emp) async {
+    final messenger = ScaffoldMessenger.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('حذف الموظف'),
-        content: Text('هل أنت متأكد من حذف الموظف [${emp['emp_code']}] ${emp['name']}؟'),
+        title: const Text('حذف (أرشفة) الموظف'),
+        content: Text(
+          'هل تريد حذف الموظف [${emp['emp_code']}] ${emp['name']}؟\n\n'
+          'سيختفي من القوائم والكشوفات الجديدة، لكن سجل حضوره وإجازاته السابق يبقى محفوظاً في التقارير، '
+          'ويمكن استعادته لاحقاً من خيار "إظهار المحذوفين".',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
           ElevatedButton(
@@ -267,8 +303,19 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         await ApiClient.instance.delete('/employees/${emp['id']}');
         _loadEmployees();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        messenger.showSnackBar(SnackBar(content: Text(e.toString())));
       }
+    }
+  }
+
+  Future<void> _restoreEmployee(Map<String, dynamic> emp) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiClient.instance.post('/employees/${emp['id']}/restore', {});
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.onTime, content: Text('تمت استعادة الموظف ${emp['name']}')));
+      _loadEmployees();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(backgroundColor: AppColors.danger, content: Text(e.toString())));
     }
   }
 
@@ -385,7 +432,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   : ListView.separated(
                                       padding: const EdgeInsets.only(top: 12),
                                       itemCount: leaves.length,
-                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      separatorBuilder: (_, _) => const Divider(height: 1),
                                       itemBuilder: (ctx, i) {
                                         final l = leaves[i];
                                         return ListTile(
@@ -397,7 +444,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                           ),
                                           subtitle: Text(
                                             (l['reason'] != null && l['reason'].toString().isNotEmpty ? 'السبب: ${l['reason']}' : 'بدون ملاحظات') +
-                                                (l['created_at'] != null ? ' • تاريخ التسجيل: ${l['created_at'].toString().split(' ')[0]}' : ''),
+                                                (l['created_at'] != null ? ' • تاريخ التسجيل: ${DateFormatter.dbTimestampToLocal(l['created_at']).split(' ')[0]}' : ''),
                                             style: const TextStyle(fontSize: 11),
                                           ),
                                         );
@@ -409,7 +456,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   : ListView.separated(
                                       padding: const EdgeInsets.only(top: 12),
                                       itemCount: transfers.length,
-                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      separatorBuilder: (_, _) => const Divider(height: 1),
                                       itemBuilder: (ctx, i) {
                                         final t = transfers[i];
                                         final fromDept = t['from_department'] ?? t['previous_department'] ?? '-';
@@ -425,7 +472,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                           subtitle: Text(
                                             (t['reason'] != null && t['reason'].toString().isNotEmpty ? 'الأمر/السبب: ${t['reason']}' : 'نقل إداري') +
                                                 (byName != null ? ' • بواسطة: $byName' : '') +
-                                                (t['created_at'] != null ? ' • بتاريخ: ${t['created_at'].toString().split(' ')[0]}' : ''),
+                                                (t['created_at'] != null ? ' • بتاريخ: ${DateFormatter.dbTimestampToLocal(t['created_at']).split(' ')[0]}' : ''),
                                             style: const TextStyle(fontSize: 11),
                                           ),
                                         );
@@ -437,7 +484,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   : ListView.separated(
                                       padding: const EdgeInsets.only(top: 12),
                                       itemCount: attendance.length,
-                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      separatorBuilder: (_, _) => const Divider(height: 1),
                                       itemBuilder: (ctx, i) {
                                         final a = attendance[i];
                                         final rawStatus = (a['status'] ?? 'ABSENT').toString();
@@ -490,12 +537,16 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardTheme.color ?? Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
+              border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
             ),
-            child: Row(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 // مربع البحث
-                Expanded(
+                SizedBox(
+                  width: 280,
                   child: SizedBox(
                     height: 40,
                     child: TextField(
@@ -512,14 +563,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
 
                 // فلتر القسم
                 SizedBox(
                   width: 220,
                   height: 40,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedDept,
+                    initialValue: _selectedDept,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -539,20 +589,28 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+
+                if (auth.isSuperAdmin)
+                  FilterChip(
+                    label: const Text('إظهار المحذوفين', style: TextStyle(fontSize: 12)),
+                    selected: _showDeleted,
+                    onSelected: (val) {
+                      setState(() => _showDeleted = val);
+                      _loadEmployees();
+                    },
+                  ),
 
                 // أزرار السوبر أدمن
                 if (auth.isSuperAdmin) ...[
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.navy,
-                      side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                      side: BorderSide(color: AppColors.navy.withValues(alpha: 0.4)),
                     ),
                     icon: const Icon(Icons.upload_file_rounded, size: 18),
                     label: const Text('استيراد من إكسل'),
                     onPressed: _importMasterEmployees,
                   ),
-                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.navy,
@@ -603,19 +661,19 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                               if (hasActiveLeave) {
                                 cardBgColor = _colorActiveLeave; // أزرق فاتح قابل للتخصيص
                                 accentColor = const Color(0xFF1976D2);
-                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
+                                cardBorder = BorderSide(color: accentColor.withValues(alpha: 0.5), width: 1.5);
                               } else if (isTerminated) {
                                 cardBgColor = _colorTerminated; // أحمر فاتح قابل للتخصيص
                                 accentColor = const Color(0xFFD32F2F);
-                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
+                                cardBorder = BorderSide(color: accentColor.withValues(alpha: 0.5), width: 1.5);
                               } else if (isSeconded) {
                                 cardBgColor = _colorSeconded; // برتقالي فاتح قابل للتخصيص
                                 accentColor = const Color(0xFFE65100);
-                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
+                                cardBorder = BorderSide(color: accentColor.withValues(alpha: 0.5), width: 1.5);
                               } else if (isExempt) {
                                 cardBgColor = _colorVipExempt;
                                 accentColor = const Color(0xFF546E7A);
-                                cardBorder = BorderSide(color: accentColor.withOpacity(0.5), width: 1.5);
+                                cardBorder = BorderSide(color: accentColor.withValues(alpha: 0.5), width: 1.5);
                               }
 
                               final bool isSpecialStatus = hasActiveLeave || isTerminated || isSeconded || isExempt;
@@ -698,9 +756,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                           subtitle: Padding(
                                             padding: const EdgeInsets.only(top: 4),
                                             child: Text(
-                                              '${emp['department']} • الحالة: ${emp['status']}' +
-                                                  (emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : '') +
-                                                  ' (انقر لعرض الملف والإجازات)',
+                                              '${emp['deleted_at'] != null ? '🗄️ محذوف (مؤرشف) • ' : ''}'
+                                              '${emp['department']} • الحالة: ${emp['status']}'
+                                              '${emp['phone'] != null && emp['phone'].toString().isNotEmpty ? ' • 📞 ${emp['phone']}' : ''}'
+                                              ' (انقر لعرض الملف والإجازات)',
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: isTerminated
@@ -717,7 +776,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                                 tooltip: 'عرض الملف وسجل الإجازات والتنقلات',
                                                 onPressed: () => _showEmployeeProfileDialog(emp),
                                               ),
-                                              if (auth.isSuperAdmin) ...[
+                                              if (auth.isSuperAdmin && emp['deleted_at'] != null)
+                                                IconButton(
+                                                  icon: const Icon(Icons.restore_from_trash_rounded, color: AppColors.onTime),
+                                                  tooltip: 'استعادة الموظف',
+                                                  onPressed: () => _restoreEmployee(emp),
+                                                ),
+                                              if (auth.isSuperAdmin && emp['deleted_at'] == null) ...[
                                         // زر النقل بين الأقسام
                                         IconButton(
                                           icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),

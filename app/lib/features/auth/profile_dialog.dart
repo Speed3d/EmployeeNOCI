@@ -49,8 +49,11 @@ class _ProfileDialogState extends State<ProfileDialog> {
         final file = files.first;
         final bytes = await file.xFile.readAsBytes();
 
+        if (!mounted) return;
         setState(() => _isLoading = true);
+        final messenger = ScaffoldMessenger.of(context);
         final res = await ApiClient.instance.uploadFile('/auth/avatar', bytes, file.name);
+        if (!mounted) return;
 
         setState(() {
           _avatarUrl = res['avatarUrl'];
@@ -58,11 +61,12 @@ class _ProfileDialogState extends State<ProfileDialog> {
         });
 
         AuthProvider.instance.updateUser({'avatarUrl': _avatarUrl});
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم تحديث الصورة الشخصية بنجاح!')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = 'تعذر رفع الصورة: $e';
@@ -71,17 +75,19 @@ class _ProfileDialogState extends State<ProfileDialog> {
   }
 
   Future<void> _saveProfile() async {
-    final newPass = _newPasswordController.text.trim();
-    final confirmPass = _confirmPasswordController.text.trim();
-    final oldPass = _oldPasswordController.text.trim();
+    final newPass = _newPasswordController.text;
+    final confirmPass = _confirmPasswordController.text;
+    final oldPass = _oldPasswordController.text;
 
     if (_isChangingPassword) {
       if (oldPass.isEmpty) {
         setState(() => _error = 'يرجى إدخال كلمة المرور الحالية لتأكيد التغيير');
         return;
       }
-      if (newPass.length < 6) {
-        setState(() => _error = 'يجب ألا تقل كلمة المرور الجديدة عن 6 خانات');
+      if (newPass.length < 8 ||
+          !RegExp(r'[A-Za-z؀-ۿ]').hasMatch(newPass) ||
+          !RegExp(r'[0-9٠-٩]').hasMatch(newPass)) {
+        setState(() => _error = 'كلمة المرور الجديدة يجب ألا تقل عن 8 خانات وأن تحتوي حرفاً ورقماً');
         return;
       }
       if (newPass != confirmPass) {
@@ -106,16 +112,20 @@ class _ProfileDialogState extends State<ProfileDialog> {
         body['newPassword'] = newPass;
       }
 
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
       final res = await ApiClient.instance.put('/auth/profile', body);
-      AuthProvider.instance.updateUser(Map<String, dynamic>.from(res));
+      // Hint: عند تغيير كلمة المرور يُرجع الخادم رمز جلسة جديداً ويُبطل القديم
+      await AuthProvider.instance.applyProfileUpdate(res);
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        navigator.pop();
+        messenger.showSnackBar(
           const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم حفظ بيانات الملف الشخصي بنجاح!')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -149,9 +159,9 @@ class _ProfileDialogState extends State<ProfileDialog> {
                   children: [
                     CircleAvatar(
                       radius: 46,
-                      backgroundColor: AppColors.navy.withOpacity(0.12),
+                      backgroundColor: AppColors.navy.withValues(alpha: 0.12),
                       backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
-                          ? NetworkImage('${ApiClient.instance.baseUrl.replaceAll('/api', '')}$_avatarUrl')
+                          ? NetworkImage('${ApiClient.instance.serverOrigin}$_avatarUrl')
                           : null,
                       child: _avatarUrl == null || _avatarUrl!.isEmpty
                           ? Text(
@@ -258,7 +268,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.1),
+                    color: AppColors.danger.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),

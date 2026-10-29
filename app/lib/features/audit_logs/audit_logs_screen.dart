@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../tools/date_formatter.dart';
 import '../../core/theme.dart';
 import '../../tools/responsive.dart';
 
@@ -38,12 +39,14 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
       }
 
       final res = await ApiClient.instance.get(url);
+      if (!mounted) return;
       setState(() {
         _logs = res['logs'] ?? [];
         _totalLogs = res['total'] ?? 0;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -128,7 +131,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-            headingRowColor: MaterialStateProperty.all(AppColors.navy.withOpacity(0.06)),
+            headingRowColor: WidgetStateProperty.all(AppColors.navy.withValues(alpha: 0.06)),
             columns: const [
               DataColumn(label: Text('المعرف #', style: TextStyle(fontWeight: FontWeight.bold))),
               DataColumn(label: Text('الوقت والتاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -141,7 +144,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
               return DataRow(
                 cells: [
                   DataCell(Text('#${l['id']}')),
-                  DataCell(Text(l['created_at'] ?? '', style: const TextStyle(fontSize: 12))),
+                  DataCell(Text(DateFormatter.dbTimestampToLocal(l['created_at']), style: const TextStyle(fontSize: 12))),
                   DataCell(
                     Row(
                       children: [
@@ -155,7 +158,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.navy.withOpacity(0.08),
+                        color: AppColors.navy.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -204,14 +207,14 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                       l['user_name'] ?? 'مستخدم',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.navy),
                     ),
-                    Text(l['created_at'] ?? '', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text(DateFormatter.dbTimestampToLocal(l['created_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.goldBright.withOpacity(0.15),
+                    color: AppColors.goldBright.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(

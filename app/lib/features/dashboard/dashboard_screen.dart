@@ -20,6 +20,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _error;
   Map<String, dynamic>? _stats;
   String _currentDate = '';
+  int _eligibleEmployees = 0;
+  bool _isCommitted = false;
 
   @override
   void initState() {
@@ -35,12 +37,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       final res = await ApiClient.instance.get('/attendance/daily');
+      if (!mounted) return;
       setState(() {
         _currentDate = res['date'] ?? '';
         _stats = res['stats'];
+        _eligibleEmployees = res['eligibleEmployees'] ?? 0;
+        _isCommitted = res['isCommitted'] == true;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -73,16 +79,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final auth = AuthProvider.instance;
-    final total = _stats?['total'] ?? 0;
+    // Hint: إجمالي الموظفين = المشمولون بالكشوفات حالياً، ونسبة الالتزام تُحسب من سجلات اليوم المعتمد
+    final total = _eligibleEmployees;
+    final dayTotal = _stats?['total'] ?? 0;
     final present = _stats?['present'] ?? 0;
-    final late = (_stats?['late'] ?? 0) + (_stats?['veryLate'] ?? 0);
+    final late = _stats?['late'] ?? 0;
     final absent = _stats?['absent'] ?? 0;
     final onLeave = _stats?['onLeave'] ?? 0;
 
     return RefreshIndicator(
       onRefresh: _loadDashboardData,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -98,31 +107,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.navy.withOpacity(0.25),
+                    color: AppColors.navy.withValues(alpha: 0.25),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
-              child: Row(
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 16,
                 children: [
-                  Expanded(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'أهلاً بك، ${auth.user?['fullName'] ?? 'المشرف'} 👋',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.waving_hand_rounded, color: AppColors.goldBright, size: 22),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'أهلاً بك، ${auth.user?['fullName'] ?? 'المشرف'}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'متابعة الحضور والانصراف لتاريخ: ${DateFormatter.toArabicDate(_currentDate)}',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 14,
                           ),
                         ),
@@ -152,6 +175,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 16),
 
+            if (!_isCommitted)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.info.withValues(alpha: 0.25)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: AppColors.info, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'لم يُعتمد كشف اليوم بعد، لذلك مؤشرات الحضور والغياب صفرية حتى يُرفع ويُعتمد كشف البصمة.',
+                        style: TextStyle(fontSize: 13, color: AppColors.info),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // شبكة الـ 5 كروت المعتمدة فقط
             LayoutBuilder(
               builder: (context, constraints) {
@@ -162,13 +209,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisCount = 3;
                 }
 
-                return GridView.count(
-                  crossAxisCount: crossAxisCount,
+                return GridView(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    mainAxisExtent: 132,
+                  ),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.35,
                   children: [
                     KpiCard(
                       title: 'إجمالي الموظفين',
@@ -183,7 +232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       value: '$present',
                       icon: Icons.how_to_reg_rounded,
                       color: AppColors.onTime,
-                      subtitle: 'نسبة الالتزام: ${total > 0 ? ((present / total) * 100).toStringAsFixed(1) : 0}%',
+                      subtitle: 'نسبة الالتزام: ${dayTotal > 0 ? ((present / dayTotal) * 100).toStringAsFixed(1) : 0}%',
                       onTap: () => widget.onNavigate(1),
                     ),
                     KpiCard(
@@ -191,7 +240,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       value: '$late',
                       icon: Icons.watch_later_rounded,
                       color: AppColors.late,
-                      subtitle: 'تأخير بعد 10:00 صباحاً',
+                      subtitle: 'تأخير عن بداية الدوام',
                       onTap: () => widget.onNavigate(1),
                     ),
                     KpiCard(
@@ -222,7 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               decoration: BoxDecoration(
                 color: Theme.of(context).cardTheme.color ?? Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.withOpacity(0.15)),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

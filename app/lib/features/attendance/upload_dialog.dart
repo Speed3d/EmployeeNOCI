@@ -40,6 +40,7 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
         final bytes = await file.xFile.readAsBytes();
         final size = await file.length();
 
+        if (!mounted) return;
         setState(() {
           _selectedFileName = file.name;
           _fileBytes = bytes;
@@ -48,6 +49,7 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'تعذر اختيار الملف: $e');
     }
   }
@@ -66,17 +68,12 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
     });
 
     try {
-      final res = await ApiClient.instance.uploadFile(
-        '/attendance/preview',
-        _fileBytes!,
-        _selectedFileName!,
-      );
-
-      if (mounted) {
-        Navigator.pop(context);
-        widget.onPreviewLoaded(res);
-      }
+      final res = await ApiClient.instance.uploadFile('/attendance/preview', _fileBytes!, _selectedFileName!);
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onPreviewLoaded(Map<String, dynamic>.from(res));
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -84,7 +81,7 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
     }
   }
 
-  // إجراء 2: حفظ واعتماد مباشر
+  // إجراء 2: حفظ واعتماد مباشر لكل الأيام الموجودة في الملف
   Future<void> _commitDirect() async {
     if (_fileBytes == null || _selectedFileName == null) {
       setState(() => _error = 'يرجى اختيار ملف الإكسل أولاً');
@@ -93,35 +90,58 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
 
     setState(() {
       _isLoading = true;
-      _loadingAction = 'جاري تحليل وحفظ واعتماد الكشف...';
+      _loadingAction = 'جاري تحليل الملف...';
       _error = null;
     });
 
     try {
-      // أولاً نعاين لجلب التاريخ والبصمات
-      final previewRes = await ApiClient.instance.uploadFile(
-        '/attendance/preview',
-        _fileBytes!,
-        _selectedFileName!,
-      );
+      // Hint: المعاينة تُحفظ في الخادم ويُعتمد كل يوم بمعرف المعاينة (لا تُرسل البصمات من الواجهة)
+      final preview = await ApiClient.instance.uploadFile('/attendance/preview', _fileBytes!, _selectedFileName!);
+      final String previewId = preview['previewId'];
+      final List<dynamic> days = preview['days'] ?? [];
+      final alreadyCommitted = days.where((d) => d['isCommitted'] == true).map((d) => d['date'].toString()).toList();
 
-      // ثم نرسل أمر الاعتماد
-      await ApiClient.instance.post('/attendance/commit', {
-        'date': previewRes['date'],
-        'punchList': previewRes['rawPunches'],
-      });
-
-      if (mounted) {
-        Navigator.pop(context);
-        widget.onCommitted();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.onTime,
-            content: Text('تم اعتماد كشف تاريخ ${previewRes['date']} وحفظه في قاعدة البيانات بنجاح!'),
+      if (!mounted) return;
+      if (alreadyCommitted.isNotEmpty || days.length > 1) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('تأكيد الاعتماد'),
+            content: Text(
+              'يحتوي الملف على ${days.length} يوم: ${days.map((d) => d['date']).join('، ')}.'
+              '${alreadyCommitted.isNotEmpty ? '\n\nتنبيه: الأيام التالية معتمدة مسبقاً وستُعاد كتابتها: ${alreadyCommitted.join('، ')}' : ''}'
+              '\n\nهل تريد اعتماد جميع هذه الأيام؟',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('اعتماد الكل')),
+            ],
           ),
         );
+        if (ok != true) {
+          if (mounted) setState(() => _isLoading = false);
+          return;
+        }
       }
+
+      for (final d in days) {
+        if (!mounted) return;
+        setState(() => _loadingAction = 'جاري اعتماد يوم ${d['date']}...');
+        await ApiClient.instance.post('/attendance/commit', {'previewId': previewId, 'date': d['date']});
+      }
+
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      widget.onCommitted();
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.onTime,
+          content: Text('تم اعتماد ${days.length == 1 ? 'كشف تاريخ ${days.first['date']}' : '${days.length} أيام'} وحفظه بنجاح!'),
+        ),
+      );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -164,7 +184,7 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
                   ),
                   borderRadius: BorderRadius.circular(12),
                   color: _selectedFileName != null
-                      ? AppColors.onTime.withOpacity(0.05)
+                      ? AppColors.onTime.withValues(alpha: 0.05)
                       : Colors.grey.shade50,
                 ),
                 child: Column(
@@ -199,7 +219,7 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withOpacity(0.1),
+                  color: AppColors.danger.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -233,33 +253,38 @@ class _UploadAttendanceDialogState extends State<UploadAttendanceDialog> {
       ),
       actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('إلغاء'),
-        ),
-        const Spacer(),
-        // خيار 1: معاينة فقط
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.navy,
-            side: const BorderSide(color: AppColors.navy),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          ),
-          icon: const Icon(Icons.visibility_rounded, size: 18),
-          label: const Text('تحليل ومعاينة فقط'),
-          onPressed: (_fileBytes == null || _isLoading) ? null : _previewOnly,
-        ),
-        const SizedBox(width: 8),
-        // خيار 2: حفظ واعتماد
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.onTime,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          ),
-          icon: const Icon(Icons.check_circle_rounded, size: 18),
-          label: const Text('حفظ واعتماد'),
-          onPressed: (_fileBytes == null || _isLoading) ? null : _commitDirect,
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            TextButton(
+              onPressed: _isLoading ? null : () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
+            // خيار 1: معاينة فقط
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.navy,
+                side: const BorderSide(color: AppColors.navy),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+              icon: const Icon(Icons.visibility_rounded, size: 18),
+              label: const Text('تحليل ومعاينة فقط'),
+              onPressed: (_fileBytes == null || _isLoading) ? null : _previewOnly,
+            ),
+            // خيار 2: حفظ واعتماد
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.onTime,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+              icon: const Icon(Icons.check_circle_rounded, size: 18),
+              label: const Text('حفظ واعتماد'),
+              onPressed: (_fileBytes == null || _isLoading) ? null : _commitDirect,
+            ),
+          ],
         ),
       ],
     );

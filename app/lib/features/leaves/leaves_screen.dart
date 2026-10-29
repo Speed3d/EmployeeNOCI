@@ -49,6 +49,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
       final empsRes = await ApiClient.instance.get('/employees?status=نشط&isExempt=0');
       final deptsRes = await ApiClient.instance.get('/employees/departments');
 
+      if (!mounted) return;
       setState(() {
         _leaves = leavesRes is List ? leavesRes : [];
         _holidays = holidaysRes is List ? holidaysRes : [];
@@ -57,6 +58,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
         _isLoading = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -66,7 +68,10 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
     String leaveType = 'اعتيادية';
     DateTime startDate = DateTime.now();
     DateTime endDate = DateTime.now();
+    TimeOfDay startTime = const TimeOfDay(hour: 10, minute: 0);
+    TimeOfDay endTime = const TimeOfDay(hour: 11, minute: 0);
     final reasonController = TextEditingController();
+    String fmt(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
     final messenger = ScaffoldMessenger.of(context);
 
@@ -74,6 +79,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (dialogCtx, setModalState) {
+          final isHourly = leaveType == 'زمنية (ساعية)';
           return AlertDialog(
             title: const Text('تسجيل إجازة لموظف'),
             content: SizedBox(
@@ -83,7 +89,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<int>(
-                      value: selectedEmpId,
+                      initialValue: selectedEmpId,
                       decoration: const InputDecoration(labelText: 'اختر الموظف *'),
                       items: _employees.map<DropdownMenuItem<int>>((e) {
                         return DropdownMenuItem<int>(
@@ -95,7 +101,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: leaveType,
+                      initialValue: leaveType,
                       decoration: const InputDecoration(labelText: 'نوع الإجازة *'),
                       items: const [
                         DropdownMenuItem(value: 'اعتيادية', child: Text('إجازة اعتيادية')),
@@ -107,46 +113,88 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                       onChanged: (val) => setModalState(() => leaveType = val ?? 'اعتيادية'),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text('من: ${DateFormatter.toYmd(startDate)}', style: const TextStyle(fontSize: 12)),
-                            onPressed: () async {
-                              final d = await showDatePicker(
-                                context: context,
-                                initialDate: startDate,
-                                firstDate: DateTime(2025),
-                                lastDate: DateTime(2030),
-                              );
-                              if (d != null) {
-                                setModalState(() {
-                                  startDate = d;
-                                  if (endDate.isBefore(startDate)) endDate = startDate;
-                                });
-                              }
-                            },
+                    if (isHourly) ...[
+                      // Hint: الإذن الساعي ليوم واحد بوقت بداية ونهاية، يُعفى فيه الموظف من التأخير أو الانصراف المبكر داخل الفترة فقط
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text('اليوم: ${DateFormatter.toYmd(startDate)}', style: const TextStyle(fontSize: 12)),
+                        onPressed: () async {
+                          final d = await showDatePicker(
+                            context: dialogCtx,
+                            initialDate: startDate,
+                            firstDate: DateTime(2025),
+                            lastDate: DateTime(2030),
+                          );
+                          if (d != null) setModalState(() => startDate = endDate = d);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.schedule_rounded, size: 16),
+                              label: Text('من الساعة: ${fmt(startTime)}', style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final t = await showTimePicker(context: dialogCtx, initialTime: startTime);
+                                if (t != null) setModalState(() => startTime = t);
+                              },
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text('إلى: ${DateFormatter.toYmd(endDate)}', style: const TextStyle(fontSize: 12)),
-                            onPressed: () async {
-                              final d = await showDatePicker(
-                                context: context,
-                                initialDate: endDate,
-                                firstDate: startDate,
-                                lastDate: DateTime(2030),
-                              );
-                              if (d != null) setModalState(() => endDate = d);
-                            },
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.schedule_rounded, size: 16),
+                              label: Text('إلى الساعة: ${fmt(endTime)}', style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final t = await showTimePicker(context: dialogCtx, initialTime: endTime);
+                                if (t != null) setModalState(() => endTime = t);
+                              },
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ] else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.calendar_today, size: 16),
+                              label: Text('من: ${DateFormatter.toYmd(startDate)}', style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final d = await showDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: startDate,
+                                  firstDate: DateTime(2025),
+                                  lastDate: DateTime(2030),
+                                );
+                                if (d != null) {
+                                  setModalState(() {
+                                    startDate = d;
+                                    if (endDate.isBefore(startDate)) endDate = startDate;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.calendar_today, size: 16),
+                              label: Text('إلى: ${DateFormatter.toYmd(endDate)}', style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final d = await showDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: endDate.isBefore(startDate) ? startDate : endDate,
+                                  firstDate: startDate,
+                                  lastDate: DateTime(2030),
+                                );
+                                if (d != null) setModalState(() => endDate = d);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: reasonController,
@@ -166,17 +214,30 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                 onPressed: selectedEmpId == null
                     ? null
                     : () async {
+                        if (isHourly && (endTime.hour * 60 + endTime.minute) <= (startTime.hour * 60 + startTime.minute)) {
+                          messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.danger, content: Text('وقت نهاية الإذن يجب أن يكون بعد وقت بدايته')));
+                          return;
+                        }
+                        final navigator = Navigator.of(ctx);
                         try {
-                          await ApiClient.instance.post('/leaves', {
+                          final res = await ApiClient.instance.post('/leaves', {
                             'employeeId': selectedEmpId,
                             'leaveType': leaveType,
                             'startDate': DateFormatter.toYmd(startDate),
-                            'endDate': DateFormatter.toYmd(endDate),
+                            'endDate': DateFormatter.toYmd(isHourly ? startDate : endDate),
+                            if (isHourly) 'startTime': fmt(startTime),
+                            if (isHourly) 'endTime': fmt(endTime),
                             'reason': reasonController.text.trim(),
                           });
-                          Navigator.pop(ctx);
+                          navigator.pop();
                           if (!mounted) return;
-                          messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم تسجيل الإجازة بنجاح')));
+                          final recalculated = res is Map ? (res['recalculatedDays'] ?? 0) : 0;
+                          messenger.showSnackBar(SnackBar(
+                            backgroundColor: AppColors.onTime,
+                            content: Text(recalculated > 0
+                                ? 'تم تسجيل الإجازة وتحديث $recalculated يوم معتمد متأثر'
+                                : 'تم تسجيل الإجازة بنجاح'),
+                          ));
                           _loadData();
                         } catch (e) {
                           if (!mounted) return;
@@ -222,7 +283,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                     label: Text('تاريخ العطلة: ${DateFormatter.toYmd(holidayDate)}'),
                     onPressed: () async {
                       final d = await showDatePicker(
-                        context: context,
+                        context: dialogCtx,
                         initialDate: holidayDate,
                         firstDate: DateTime(2025),
                         lastDate: DateTime(2030),
@@ -239,12 +300,13 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
                 onPressed: () async {
                   if (titleController.text.trim().isEmpty) return;
+                  final navigator = Navigator.of(ctx);
                   try {
                     await ApiClient.instance.post('/leaves/holidays', {
                       'date': DateFormatter.toYmd(holidayDate),
                       'title': titleController.text.trim(),
                     });
-                    Navigator.pop(ctx);
+                    navigator.pop();
                     if (!mounted) return;
                     messenger.showSnackBar(const SnackBar(backgroundColor: AppColors.onTime, content: Text('تم إضافة العطلة الرسمية بنجاح')));
                     _loadData();
@@ -287,14 +349,14 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
           // شريط فلترة القسم للإجازات
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Theme.of(context).cardTheme.color?.withOpacity(0.5) ?? Colors.grey.shade50,
+            color: Theme.of(context).cardTheme.color?.withValues(alpha: 0.5) ?? Colors.grey.shade50,
             child: Row(
               children: [
                 SizedBox(
                   width: 220,
                   height: 38,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedDept,
+                    initialValue: _selectedDept,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -309,6 +371,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                           )),
                     ],
                     onChanged: (val) {
+                      if (!mounted) return;
                       setState(() => _selectedDept = val);
                       _loadData();
                     },
@@ -363,7 +426,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                                     ChoiceChip(
                                       label: Text('الإجازات السارية (${activeLeaves.length})'),
                                       selected: _leaveFilterMode == 'ACTIVE',
-                                      selectedColor: AppColors.onTime.withOpacity(0.15),
+                                      selectedColor: AppColors.onTime.withValues(alpha: 0.15),
                                       labelStyle: TextStyle(
                                         color: _leaveFilterMode == 'ACTIVE' ? AppColors.onTime : Colors.black87,
                                         fontWeight: FontWeight.bold,
@@ -434,7 +497,7 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: isExpired ? Colors.grey.shade200 : AppColors.onTime.withOpacity(0.12),
+                                                      color: isExpired ? Colors.grey.shade200 : AppColors.onTime.withValues(alpha: 0.12),
                                                       borderRadius: BorderRadius.circular(4),
                                                     ),
                                                     child: Text(
@@ -449,7 +512,9 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                                                 ],
                                               ),
                                               subtitle: Text(
-                                                'نوع الإجازة: ${l['leave_type']} • من ${l['start_date']} إلى ${l['end_date']}' +
+                                                (l['start_time'] != null
+                                                    ? 'نوع الإجازة: ${l['leave_type']} • يوم ${l['start_date']} من ${l['start_time']} إلى ${l['end_time']}'
+                                                    : 'نوع الإجازة: ${l['leave_type']} • من ${l['start_date']} إلى ${l['end_date']}') +
                                                     (l['reason'] != null && l['reason'].toString().isNotEmpty ? ' (${l['reason']})' : ''),
                                                 style: const TextStyle(fontSize: 12),
                                               ),
@@ -457,11 +522,12 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                                                 icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
                                                 tooltip: 'حذف الإجازة',
                                                 onPressed: () async {
+                                                  final messenger = ScaffoldMessenger.of(context);
                                                   try {
                                                     await ApiClient.instance.delete('/leaves/${l['id']}');
                                                     _loadData();
                                                   } catch (e) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                                                    messenger.showSnackBar(SnackBar(content: Text(e.toString())));
                                                   }
                                                 },
                                               ),
@@ -496,11 +562,12 @@ class _LeavesScreenState extends State<LeavesScreen> with SingleTickerProviderSt
                                         ? IconButton(
                                             icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
                                             onPressed: () async {
+                                              final messenger = ScaffoldMessenger.of(context);
                                               try {
                                                 await ApiClient.instance.delete('/leaves/holidays/${h['id']}');
                                                 _loadData();
                                               } catch (e) {
-                                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                                                messenger.showSnackBar(SnackBar(content: Text(e.toString())));
                                               }
                                             },
                                           )

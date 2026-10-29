@@ -34,6 +34,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     try {
       final res = await ApiClient.instance.get('/employees/departments');
       if (res is List) {
+        if (!mounted) return;
         setState(() {
           _departments = res.where((d) => d['is_excluded'] == 0).toList();
         });
@@ -56,12 +57,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
 
       final res = await ApiClient.instance.get(url);
+      if (!mounted) return;
       setState(() {
         _reportData = res['report'] ?? [];
         _committedDaysCount = res['committedDaysCount'] ?? 0;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -74,15 +77,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (_reportData.isEmpty) return;
 
     try {
-      final token = ApiClient.instance.token ?? '';
-      String url = '${ApiClient.instance.baseUrl}/reports/export-monthly?year=$_selectedYear&month=$_selectedMonth&token=$token';
-      if (_selectedDept != null && _selectedDept!.isNotEmpty) {
-        url += '&department=${Uri.encodeComponent(_selectedDept!)}';
-      }
+      // Hint: رابط تنزيل مؤقت (60 ثانية) بدل وضع رمز الجلسة في الرابط
+      final url = await ApiClient.instance.downloadUrl('export-monthly', {
+        'year': _selectedYear,
+        'month': _selectedMonth,
+        if (_selectedDept != null && _selectedDept!.isNotEmpty) 'department': _selectedDept,
+      });
 
       final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(backgroundColor: AppColors.onTime, content: Text('جاري تنزيل ملف التقرير الشهري (Excel)...')),
@@ -111,7 +114,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardTheme.color ?? Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15))),
+              border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15))),
             ),
             child: Wrap(
               spacing: 12,
@@ -123,7 +126,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   width: 130,
                   height: 40,
                   child: DropdownButtonFormField<int>(
-                    value: _selectedYear,
+                    initialValue: _selectedYear,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -142,7 +145,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   width: 140,
                   height: 40,
                   child: DropdownButtonFormField<int>(
-                    value: _selectedMonth,
+                    initialValue: _selectedMonth,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -160,7 +163,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   width: 200,
                   height: 40,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedDept,
+                    initialValue: _selectedDept,
                     isExpanded: true,
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -210,7 +213,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           if (_hasSearched && !_isLoading)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              color: AppColors.navy.withOpacity(0.06),
+              color: AppColors.navy.withValues(alpha: 0.06),
               child: Row(
                 children: [
                   const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.navy),
@@ -234,7 +237,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.search_rounded, size: 64, color: AppColors.navy.withOpacity(0.4)),
+                                Icon(Icons.search_rounded, size: 64, color: AppColors.navy.withValues(alpha: 0.4)),
                                 const SizedBox(height: 16),
                                 const Text(
                                   'يرجى تحديد السنة والشهر والقسم المطلوب ثم النقر على [بحث وتحليل التقرير]',
@@ -250,7 +253,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 scrollDirection: Axis.horizontal,
                                 child: SingleChildScrollView(
                                   child: DataTable(
-                                    headingRowColor: MaterialStateProperty.all(AppColors.navy.withOpacity(0.08)),
+                                    headingRowColor: WidgetStateProperty.all(AppColors.navy.withValues(alpha: 0.08)),
                                     columns: const [
                                       DataColumn(label: Text('المعرف', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('الاسم', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -258,6 +261,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       DataColumn(label: Text('الحضور', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('في الوقت', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('التأخير', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      DataColumn(label: Text('انصراف مبكر (أيام)', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      DataColumn(label: Text('بصمة ناقصة', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('الغياب', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('الإجازات', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('أيام الراحة', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -272,11 +277,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       return DataRow(
                                         cells: [
                                           DataCell(Text('${r['emp_code']}')),
-                                          DataCell(Text(r['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
+                                          DataCell(Text(
+                                            '${r['name'] ?? ''}${r['currently_inactive'] == 1 ? ' (غير نشط حالياً)' : ''}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                          )),
                                           DataCell(Text(r['department'] ?? '')),
                                           DataCell(Text('${r['days_present']}', style: const TextStyle(color: AppColors.onTime, fontWeight: FontWeight.bold))),
                                           DataCell(Text('${r['days_on_time']}')),
                                           DataCell(Text('$totalLateDays', style: TextStyle(color: totalLateDays > 0 ? AppColors.late : null))),
+                                          DataCell(Text('${r['days_early_leave'] ?? 0}')),
+                                          DataCell(Text('${r['days_missed_punch'] ?? 0}', style: TextStyle(color: (r['days_missed_punch'] ?? 0) > 0 ? AppColors.missedPunch : null))),
                                           DataCell(Text('${r['days_absent']}', style: TextStyle(color: (r['days_absent'] ?? 0) > 0 ? AppColors.danger : null, fontWeight: FontWeight.bold))),
                                           DataCell(Text('${r['days_on_leave']}', style: const TextStyle(color: AppColors.info))),
                                           DataCell(Text('${r['days_off']}')),

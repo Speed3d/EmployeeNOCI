@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/auth_provider.dart';
 import '../../core/theme.dart';
-import '../../core/constants.dart';
 import '../../core/api_client.dart';
 import '../../shared/custom_button.dart';
 
@@ -88,6 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } catch (_) {}
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -122,9 +122,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         margin: const EdgeInsets.only(bottom: 20),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.08),
+                          color: AppColors.danger.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
                         ),
                         child: const Row(
                           children: [
@@ -150,7 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.navy.withOpacity(0.3),
+                            color: AppColors.navy.withValues(alpha: 0.3),
                             blurRadius: 16,
                             offset: const Offset(0, 4),
                           ),
@@ -161,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: Image.network(
                                 AuthProvider.instance.fullLogoUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
+                                errorBuilder: (_, _, _) => const Icon(
                                   Icons.fingerprint_rounded,
                                   color: AppColors.goldBright,
                                   size: 42,
@@ -183,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -205,9 +205,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.1),
+                          color: AppColors.danger.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -311,8 +311,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.check_rounded, color: Colors.green),
                             onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
                               await ApiClient.instance.setBaseUrl(_urlController.text.trim());
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              messenger.showSnackBar(
                                 const SnackBar(content: Text('تم تحديث عنوان الخادم')),
                               );
                             },

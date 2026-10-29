@@ -3,6 +3,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
+import 'widgets/color_setting_item.dart';
+import 'widgets/reset_dialog.dart';
+import 'widgets/security_dialogs.dart';
 import '../../core/auth_provider.dart';
 import '../../shared/custom_button.dart';
 
@@ -27,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   final _workEndTimeController = TextEditingController();
   final _earlyBonusTimeController = TextEditingController();
   final _overtimeBonusTimeController = TextEditingController();
+  final _singlePunchThresholdController = TextEditingController();
   final _bannerTextController = TextEditingController();
   final _activeYearController = TextEditingController();
 
@@ -50,16 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   List<dynamic> _users = [];
   List<dynamic> _departments = [];
 
-  static Color parseHex(String? hex, Color fallback) {
-    if (hex == null || hex.isEmpty) return fallback;
-    try {
-      String clean = hex.replaceAll('#', '').trim();
-      if (clean.length == 6) clean = 'FF$clean';
-      return Color(int.parse(clean, radix: 16));
-    } catch (_) {
-      return fallback;
-    }
-  }
 
   @override
   void initState() {
@@ -78,6 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     _workEndTimeController.dispose();
     _earlyBonusTimeController.dispose();
     _overtimeBonusTimeController.dispose();
+    _singlePunchThresholdController.dispose();
     _bannerTextController.dispose();
     _activeYearController.dispose();
     super.dispose();
@@ -90,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       final users = await ApiClient.instance.get('/settings/users');
       final depts = await ApiClient.instance.get('/employees/departments');
 
+      if (!mounted) return;
       setState(() {
         _institutionNameController.text = settings['institution_name'] ?? '';
         _appTitleController.text = settings['app_title'] ?? '';
@@ -99,6 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _bonusMode = settings['bonus_mode'] ?? 'default';
         _earlyBonusTimeController.text = settings['early_bonus_time'] ?? '09:00';
         _overtimeBonusTimeController.text = settings['overtime_bonus_time'] ?? '15:00';
+        _singlePunchThresholdController.text = settings['single_punch_exit_threshold'] ?? '12:30';
         _bannerTextController.text = settings['announcement_banner_text'] ?? '';
         _bannerActive = settings['announcement_banner_active'] == 'true';
         _maintenanceMode = settings['maintenance_mode'] == 'true';
@@ -115,6 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -134,6 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         'bonus_mode': _bonusMode,
         'early_bonus_time': _earlyBonusTimeController.text.trim(),
         'overtime_bonus_time': _overtimeBonusTimeController.text.trim(),
+        'single_punch_exit_threshold': _singlePunchThresholdController.text.trim(),
         'announcement_banner_text': _bannerTextController.text.trim(),
         'announcement_banner_active': _bannerActive.toString(),
         'maintenance_mode': _maintenanceMode.toString(),
@@ -199,6 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       if (files.isNotEmpty) {
         final file = files.first;
         final bytes = await file.xFile.readAsBytes();
+        if (!mounted) return;
         setState(() => _isLoading = true);
         final res = await ApiClient.instance.uploadFile('/settings/logo', bytes, file.name);
 
@@ -288,18 +288,14 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     }
   }
 
+  // Hint: التنزيل برابط مؤقت (60 ثانية) بدل وضع رمز الجلسة في الرابط
   Future<void> _downloadBackup(String? filename) async {
-    final baseUrl = ApiClient.instance.baseUrl;
-    final token = ApiClient.instance.token ?? '';
-    final url = '$baseUrl/backup/download?token=$token&filename=${filename ?? 'current'}';
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      if (await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      }
+      final url = await ApiClient.instance.downloadUrl('backup', {'filename': filename ?? 'current'});
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر بدء التنزيل: $e')));
-      }
+      messenger.showSnackBar(SnackBar(content: Text('تعذر بدء التنزيل: $e')));
     }
   }
 
@@ -316,8 +312,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       return;
     }
 
-    final verified = await _promptPasswordForSensitiveAction('استعادة قاعدة البيانات من ملف خارجي: (${file.name})');
-    if (verified != true) return;
+    if (!mounted) return;
+    final verified = await showSensitiveActionPrompt(context, 'استعادة قاعدة البيانات من ملف خارجي: (${file.name})');
+    if (verified != true || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     final bytes = await file.xFile.readAsBytes();
@@ -342,8 +339,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   }
 
   Future<void> _restoreNamedBackup(String filename) async {
-    final verified = await _promptPasswordForSensitiveAction('استعادة قاعدة البيانات من النسخة: [$filename]');
-    if (verified != true) return;
+    final verified = await showSensitiveActionPrompt(context, 'استعادة قاعدة البيانات من النسخة: [$filename]');
+    if (verified != true || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _isLoading = true);
@@ -394,128 +391,14 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     }
   }
 
-  // نافذة تأكيد الهوية بكلمة مرور السوبر أدمن قبل العمليات الحساسة
-  Future<bool?> _promptPasswordForSensitiveAction(String actionTitle) async {
-    final passCtrl = TextEditingController();
-    bool obscure = true;
-    bool isVerifying = false;
-    String? err;
-
-    String cleanDigits(String s) {
-      const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-      for (int i = 0; i < 10; i++) {
-        s = s.replaceAll(ar[i], '$i');
-      }
-      return s.trim();
-    }
-
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
-              children: [
-                Icon(Icons.security_rounded, color: AppColors.danger),
-                SizedBox(width: 8),
-                Text('تأكيد أمني مطلوب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            content: SizedBox(
-              width: 380,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'يتطلب تنفيذ ($actionTitle) إدخال كلمة مرور حساب السوبر أدمن لتأكيد العملية وحماية البيانات:',
-                    style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: passCtrl,
-                    obscureText: obscure,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'كلمة مرور السوبر أدمن',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-                        onPressed: () => setDlgState(() => obscure = !obscure),
-                      ),
-                      errorText: err,
-                    ),
-                    onSubmitted: (_) async {
-                      final pwd = cleanDigits(passCtrl.text);
-                      if (pwd.isEmpty) {
-                        setDlgState(() => err = 'يرجى إدخال كلمة المرور');
-                        return;
-                      }
-                      setDlgState(() {
-                        isVerifying = true;
-                        err = null;
-                      });
-                      try {
-                        await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
-                        if (context.mounted) Navigator.pop(context, true);
-                      } catch (e) {
-                        setDlgState(() {
-                          isVerifying = false;
-                          err = 'كلمة المرور غير صحيحة، يرجى التأكد والمحاولة';
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isVerifying ? null : () => Navigator.pop(context, false),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
-                icon: isVerifying
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.check_circle_rounded, size: 16),
-                label: const Text('تأكيد ومتابعة'),
-                onPressed: isVerifying
-                    ? null
-                    : () async {
-                        final pwd = cleanDigits(passCtrl.text);
-                        if (pwd.isEmpty) {
-                          setDlgState(() => err = 'يرجى إدخال كلمة المرور');
-                          return;
-                        }
-                        setDlgState(() {
-                          isVerifying = true;
-                          err = null;
-                        });
-                        try {
-                          await ApiClient.instance.post('/auth/verify-password', {'password': pwd});
-                          if (context.mounted) Navigator.pop(context, true);
-                        } catch (e) {
-                          setDlgState(() {
-                            isVerifying = false;
-                            err = 'كلمة المرور غير صحيحة، يرجى التأكد والمحاولة';
-                          });
-                        }
-                      },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   // كشف كلمة المرور لمستخدم محدد (النقطة 15)
+  // Hint: الخادم هو من يتحقق من كلمة مرور الأدمن قبل الكشف، ويسجل العملية في سجل الحركات
   Future<void> _revealPassword(int userId, String username) async {
+    final adminPassword = await askAdminPassword(context, 'كشف كلمة مرور المستخدم [$username]');
+    if (adminPassword == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      final res = await ApiClient.instance.get('/settings/users/$userId/reveal-password');
+      final res = await ApiClient.instance.post('/settings/users/$userId/reveal-password', {'adminPassword': adminPassword});
       final pass = res['password'] ?? '';
 
       if (!mounted) return;
@@ -540,7 +423,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.navy.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.navy.withValues(alpha: 0.3)),
                 ),
                 child: SelectableText(
                   pass,
@@ -568,7 +451,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(backgroundColor: AppColors.danger, content: Text('فشل كشف كلمة المرور: $e')),
       );
     }
@@ -578,168 +461,16 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   /// 1. factory_default: إعادة الضبط لنقطة البداية الأصلية مع إعادة الموظفين للنسخة الأصلية
   /// 2. wipe_all: تصفير شامل بالكامل مع حذف الموظفين والأقسام ليصبح النظام فارغاً تماماً
   Future<void> _resetDatabase() async {
-    final passwordController = TextEditingController();
-    String selectedResetMode = 'factory_default';
+    final choice = await showResetDialog(context);
+    if (choice == null || !mounted) return;
+    final selectedResetMode = choice.mode;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 28),
-              SizedBox(width: 8),
-              Text('تصفير النظام وإعادة الضبط للبداية'),
-            ],
-          ),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.danger.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
-                    ),
-                    child: const Text(
-                      'تحذير صارم: سيتم أخذ نسخة احتياطية تلقائية للأمان قبل تنفيذ التصفير. يرجى تحديد نوع التصفير المطلوب بدقة:',
-                      style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 12.5),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  // الخيار الأول: إعادة الضبط لنقطة البداية الأصلية
-                  InkWell(
-                    onTap: () => setDialogState(() => selectedResetMode = 'factory_default'),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: selectedResetMode == 'factory_default'
-                            ? AppColors.navy.withValues(alpha: 0.08)
-                            : Colors.grey.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selectedResetMode == 'factory_default' ? AppColors.navy : Colors.grey.shade300,
-                          width: selectedResetMode == 'factory_default' ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            selectedResetMode == 'factory_default'
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: selectedResetMode == 'factory_default' ? AppColors.navy : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '1. إعادة الضبط لنقطة البداية الأصلية (مع إعادة الموظفين للنسخة الأصلية)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'مسح كافة البصمات، الإجازات، العطل، الجداول، القوالب المضافة، التنقلات، المحادثات، المستخدمين الإضافيين، وسجل الحركات، مع إعادة إعدادات النظام وقائمة الموظفين والأقسام لنسخة الإكسل الأصلية.',
-                                  style: TextStyle(fontSize: 12, color: AppColors.vipExempt),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // الخيار الثاني: تصفير شامل بالكامل مع حذف الموظفين
-                  InkWell(
-                    onTap: () => setDialogState(() => selectedResetMode = 'wipe_all'),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: selectedResetMode == 'wipe_all'
-                            ? AppColors.danger.withValues(alpha: 0.08)
-                            : Colors.grey.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selectedResetMode == 'wipe_all' ? AppColors.danger : Colors.grey.shade300,
-                          width: selectedResetMode == 'wipe_all' ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            selectedResetMode == 'wipe_all'
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: selectedResetMode == 'wipe_all' ? AppColors.danger : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '2. تصفير شامل بالكامل (مع حذف جميع الموظفين والأقسام)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppColors.danger),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'حذف كل شيء في النظام بما في ذلك جميع أسماء الموظفين والأقسام والمستخدمين الإضافيين والقوالب والإعدادات والسجلات ليصبح النظام فارغاً تماماً (0 موظف).',
-                                  style: TextStyle(fontSize: 12, color: AppColors.vipExempt),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('للتأكيد، يرجى إدخال كلمة مرور السوبر أدمن:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'كلمة المرور *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lock_rounded),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('تأكيد التصفير النهائي'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirm != true || passwordController.text.trim().isEmpty) return;
 
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _isLoading = true);
     try {
       final res = await ApiClient.instance.post('/settings/reset-db', {
-        'password': passwordController.text.trim(),
+        'password': choice.password,
         'resetMode': selectedResetMode,
       });
 
@@ -860,6 +591,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     bool canManageExclusions = user?['can_manage_exclusions'] == 1;
     bool canRecommit = user?['can_recommit'] == 1;
     bool isActive = user?['is_active'] != 0;
+    final isSelf = isEdit && user['id'] == AuthProvider.instance.user?['id'];
 
     showDialog(
       context: context,
@@ -888,19 +620,26 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       controller: passwordController,
                       obscureText: true,
                       decoration: InputDecoration(
-                        labelText: isEdit ? 'كلمة المرور الجديدة (اتركه فارغاً للإبقاء)' : 'كلمة المرور *',
+                        labelText: isEdit ? 'كلمة المرور الجديدة (اتركه فارغاً للإبقاء)' : 'كلمة المرور المؤقتة *',
+                        helperText: '8 خانات على الأقل وتحتوي حرفاً ورقماً. سيُطلب من المستخدم تغييرها عند دخوله',
+                        helperMaxLines: 2,
                         border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 12),
+                    if (isSelf)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Text('لا يمكنك تغيير رتبتك أو تعطيل حسابك بنفسك.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ),
                     DropdownButtonFormField<String>(
-                      value: role,
+                      initialValue: role,
                       decoration: const InputDecoration(labelText: 'الرتبة والدور *', border: OutlineInputBorder()),
                       items: const [
                         DropdownMenuItem(value: 'SUPER_ADMIN', child: Text('سوبر أدمن (تحكم كامل)')),
                         DropdownMenuItem(value: 'DATA_ENTRY', child: Text('مدخل بيانات')),
                       ],
-                      onChanged: (val) => setModalState(() => role = val!),
+                      onChanged: isSelf ? null : (val) => setModalState(() => role = val!),
                     ),
                     const SizedBox(height: 12),
                     // تفويض الصلاحيات لمدخل البيانات
@@ -916,11 +655,11 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         onChanged: (val) => setModalState(() => canRecommit = val),
                       ),
                     ],
-                    if (isEdit)
+                    if (isEdit && !isSelf)
                       SwitchListTile(
                         title: const Text('حالة الحساب (نشط ومسموح له بالدخول)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                         value: isActive,
-                        activeColor: AppColors.onTime,
+                        activeThumbColor: AppColors.onTime,
                         onChanged: (val) => setModalState(() => isActive = val),
                       ),
                   ],
@@ -932,30 +671,32 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
                 onPressed: () async {
+                  final navigator = Navigator.of(ctx);
+                  final messenger = ScaffoldMessenger.of(context);
                   try {
                     if (isEdit) {
                       await ApiClient.instance.put('/settings/users/${user['id']}', {
                         'fullName': fullNameController.text.trim(),
-                        'role': role,
-                        'newPassword': passwordController.text.trim().isNotEmpty ? passwordController.text.trim() : null,
+                        if (!isSelf) 'role': role,
+                        'newPassword': passwordController.text.isNotEmpty ? passwordController.text : null,
                         'canManageExclusions': canManageExclusions,
                         'canRecommit': canRecommit,
-                        'isActive': isActive,
+                        if (!isSelf) 'isActive': isActive,
                       });
                     } else {
                       await ApiClient.instance.post('/settings/users', {
                         'username': usernameController.text.trim(),
                         'fullName': fullNameController.text.trim(),
-                        'password': passwordController.text.trim(),
+                        'password': passwordController.text,
                         'role': role,
                         'canManageExclusions': canManageExclusions,
                         'canRecommit': canRecommit,
                       });
                     }
-                    Navigator.pop(ctx);
+                    navigator.pop();
                     _loadSettingsAndUsers();
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                    messenger.showSnackBar(SnackBar(content: Text('خطأ: $e')));
                   }
                 },
                 child: const Text('حفظ'),
@@ -1048,6 +789,16 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: _singlePunchThresholdController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'عتبة البصمة المنفردة (12:30)',
+                                      helperText: 'إذا بصم الموظف مرة واحدة بعد هذا الوقت تُعامل كبصمة خروج فقط (يجب أن تقع بين بداية الدوام ونهايته)',
+                                      helperMaxLines: 2,
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1067,25 +818,27 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                   if (_bonusEnabled) ...[
                                     const SizedBox(height: 12),
                                     const Text('نمط احتساب المكافأة:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: RadioListTile<String>(
-                                            title: const Text('افتراضي (09:00 و 15:00)', style: TextStyle(fontSize: 13)),
-                                            value: 'default',
-                                            groupValue: _bonusMode,
-                                            onChanged: (val) => setState(() => _bonusMode = val!),
+                                    RadioGroup<String>(
+                                      groupValue: _bonusMode,
+                                      onChanged: (val) => setState(() => _bonusMode = val!),
+                                      child: const Wrap(
+                                        children: [
+                                          SizedBox(
+                                            width: 360,
+                                            child: RadioListTile<String>(
+                                              title: Text('افتراضي (قبل بداية الدوام بساعة، وبعد نهايته)', style: TextStyle(fontSize: 13)),
+                                              value: 'default',
+                                            ),
                                           ),
-                                        ),
-                                        Expanded(
-                                          child: RadioListTile<String>(
-                                            title: const Text('مخصص حسب الرغبة', style: TextStyle(fontSize: 13)),
-                                            value: 'custom',
-                                            groupValue: _bonusMode,
-                                            onChanged: (val) => setState(() => _bonusMode = val!),
+                                          SizedBox(
+                                            width: 260,
+                                            child: RadioListTile<String>(
+                                              title: Text('مخصص حسب الرغبة', style: TextStyle(fontSize: 13)),
+                                              value: 'custom',
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                     if (_bonusMode == 'custom') ...[
                                       const SizedBox(height: 12),
@@ -1161,9 +914,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                             color: Colors.white,
                                           ),
                                           child: Image.network(
-                                            '${ApiClient.instance.baseUrl.replaceAll('/api', '')}$_currentLogoUrl',
+                                            '${ApiClient.instance.serverOrigin}$_currentLogoUrl',
                                             fit: BoxFit.contain,
-                                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded, size: 24, color: Colors.grey),
+                                            errorBuilder: (_, _, _) => const Icon(Icons.broken_image_rounded, size: 24, color: Colors.grey),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -1207,7 +960,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                               style: TextStyle(color: isExcluded ? AppColors.danger : AppColors.onTime, fontSize: 12),
                             ),
                             value: isExcluded,
-                            activeColor: AppColors.danger,
+                            activeThumbColor: AppColors.danger,
                             onChanged: (val) async {
                               try {
                                 await ApiClient.instance.put('/employees/departments/${dept['id']}/exclusion', {
@@ -1215,6 +968,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                 });
                                 _loadSettingsAndUsers();
                               } catch (e) {
+                                if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
                               }
                             },
@@ -1261,10 +1015,11 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                   ),
                                   subtitle: Text(
-                                    'الدور: ${isSuper ? 'سوبر أدمن' : 'مدخل بيانات'}' +
-                                        (u['is_active'] == 0 ? ' • [الحساب معطل]' : '') +
-                                        (u['can_manage_exclusions'] == 1 ? ' • [صلاحية استثناء]' : '') +
-                                        (u['can_recommit'] == 1 ? ' • [صلاحية إعادة الاعتماد]' : ''),
+                                    'الدور: ${isSuper ? 'سوبر أدمن' : 'مدخل بيانات'}'
+                                    '${u['is_active'] == 0 ? ' • [الحساب معطل]' : ''}'
+                                    '${u['must_change_password'] == 1 ? ' • [كلمة مرور مؤقتة]' : ''}'
+                                    '${u['can_manage_exclusions'] == 1 ? ' • [صلاحية استثناء]' : ''}'
+                                    '${u['can_recommit'] == 1 ? ' • [صلاحية إعادة الاعتماد]' : ''}',
                                     style: TextStyle(fontSize: 12, color: u['is_active'] == 0 ? AppColors.danger : null),
                                   ),
                                   trailing: Row(
@@ -1408,9 +1163,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              color: AppColors.danger.withOpacity(0.06),
+                              color: AppColors.danger.withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                              border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1455,10 +1210,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
   /// Hint: تبويب تخصيص ألوان حالات الموظفين في السجل
   Widget _buildStatusColorsTab() {
-    final activeLeaveColor = parseHex(_colorActiveLeave, const Color(0xFFE8F1FC));
-    final secondedColor = parseHex(_colorSeconded, const Color(0xFFFFF3E0));
-    final terminatedColor = parseHex(_colorTerminated, const Color(0xFFFFEBEE));
-    final vipExemptColor = parseHex(_colorVipExempt, const Color(0xFFECEFF1));
+    final activeLeaveColor = parseHexColor(_colorActiveLeave, const Color(0xFFE8F1FC));
+    final secondedColor = parseHexColor(_colorSeconded, const Color(0xFFFFF3E0));
+    final terminatedColor = parseHexColor(_colorTerminated, const Color(0xFFFFEBEE));
+    final vipExemptColor = parseHexColor(_colorVipExempt, const Color(0xFFECEFF1));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1491,7 +1246,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   const SizedBox(height: 24),
 
                   // 1. إجازة حالياً وسارية
-                  _buildColorSettingItem(
+                  buildColorSettingItem(
                     title: '1. لون الموظف المجاز حالياً (إجازة سارية)',
                     subtitle: 'تُطبق على أي موظف لديه إجازة معتمدة تغطي تاريخ اليوم الحالي',
                     currentColorHex: _colorActiveLeave,
@@ -1501,7 +1256,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   const Divider(height: 32),
 
                   // 2. موظف تنسيب
-                  _buildColorSettingItem(
+                  buildColorSettingItem(
                     title: '2. لون موظفي التنسيب (تنسيب)',
                     subtitle: 'تُطبق على موظفي قسم أو حالة التنسيب في السجل',
                     currentColorHex: _colorSeconded,
@@ -1511,7 +1266,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   const Divider(height: 32),
 
                   // 3. منتهي خدماته / استقالة / متوفى
-                  _buildColorSettingItem(
+                  buildColorSettingItem(
                     title: '3. لون الموظف المنتهي خدماته (استقالة / إنهاء خدمة / متوفى)',
                     subtitle: 'تُطبق على المستقيلين أو المتوفين لتمييزهم فورياً عن الكادر النشط',
                     currentColorHex: _colorTerminated,
@@ -1521,7 +1276,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   const Divider(height: 32),
 
                   // 4. مستثنى قيادي VIP
-                  _buildColorSettingItem(
+                  buildColorSettingItem(
                     title: '4. لون المستثنى القيادي (VIP)',
                     subtitle: 'تُطبق على الأمين العام والمستشارين المستثنين رسمياً من البصمة',
                     currentColorHex: _colorVipExempt,
@@ -1546,13 +1301,13 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            Expanded(child: _buildMiniCardPreview('مجاز حالياً', '🏖️ إجازة سارية', activeLeaveColor, const Color(0xFF1976D2))),
+                            Expanded(child: buildMiniCardPreview('مجاز حالياً', '🏖️ إجازة سارية', activeLeaveColor, const Color(0xFF1976D2))),
                             const SizedBox(width: 8),
-                            Expanded(child: _buildMiniCardPreview('تنسيب', '📋 تنسيب', secondedColor, const Color(0xFFE65100))),
+                            Expanded(child: buildMiniCardPreview('تنسيب', '📋 تنسيب', secondedColor, const Color(0xFFE65100))),
                             const SizedBox(width: 8),
-                            Expanded(child: _buildMiniCardPreview('منتهي خدماته', '🛑 استقالة', terminatedColor, const Color(0xFFD32F2F))),
+                            Expanded(child: buildMiniCardPreview('منتهي خدماته', '🛑 استقالة', terminatedColor, const Color(0xFFD32F2F))),
                             const SizedBox(width: 8),
-                            Expanded(child: _buildMiniCardPreview('مستثنى VIP', '⭐ قيادي VIP', vipExemptColor, const Color(0xFF546E7A))),
+                            Expanded(child: buildMiniCardPreview('مستثنى VIP', '⭐ قيادي VIP', vipExemptColor, const Color(0xFF546E7A))),
                           ],
                         ),
                       ],
@@ -1628,7 +1383,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.navy,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          side: BorderSide(color: AppColors.navy.withOpacity(0.4)),
+                          side: BorderSide(color: AppColors.navy.withValues(alpha: 0.4)),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         icon: const Icon(Icons.download_rounded, size: 18),
@@ -1724,7 +1479,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _backupsList.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final b = _backupsList[i];
                         return ListTile(
@@ -1765,105 +1520,6 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildColorSettingItem({
-    required String title,
-    required String subtitle,
-    required String currentColorHex,
-    required List<String> palette,
-    required ValueChanged<String> onColorSelected,
-  }) {
-    final current = parseHex(currentColorHex, Colors.white);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        const SizedBox(height: 4),
-        Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: current,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.shade400, width: 1.5),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 2)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            for (final hex in palette)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: InkWell(
-                  onTap: () => onColorSelected(hex),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: parseHex(hex, Colors.white),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: currentColorHex.toLowerCase() == hex.toLowerCase() ? AppColors.navy : Colors.grey.shade300,
-                        width: currentColorHex.toLowerCase() == hex.toLowerCase() ? 2.5 : 1,
-                      ),
-                    ),
-                    child: currentColorHex.toLowerCase() == hex.toLowerCase()
-                        ? const Icon(Icons.check_rounded, size: 16, color: AppColors.navy)
-                        : null,
-                  ),
-                ),
-              ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 110,
-              height: 36,
-              child: TextFormField(
-                initialValue: currentColorHex,
-                key: ValueKey(currentColorHex),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onChanged: (val) {
-                  if (val.trim().isNotEmpty) onColorSelected(val.trim());
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMiniCardPreview(String label, String tag, Color bg, Color accent) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent.withOpacity(0.4)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
-            child: Text(tag, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

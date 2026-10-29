@@ -1,11 +1,11 @@
 {
-    "name": "noci_attendance",
-    "short_name": "noci_attendance",
+    "name": "نظام حضور موظفي المقر - NOCI",
+    "short_name": "حضور NOCI",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "نظام متابعة حضور وانصراف موظفي المقر - اللجنة الأولمبية الوطنية العراقية",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -31,5 +31,7 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "lang": "ar",
+    "dir": "rtl"
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -5,19 +6,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
 
 /// Hint: عميل الاتصال الموحد بالخادم (API Client)
-/// يكتشف بيئة التشغيل تلقائياً (متصفح الويب، محاكي الأندرويد، أو الدومين السحابي)
+/// يكتشف بيئة التشغيل تلقائياً، ويطبق مهلة على كل طلب، ويعالج انتهاء الجلسة ووضع الصيانة مركزياً
 class ApiClient {
   static final ApiClient instance = ApiClient._();
   ApiClient._();
 
+  /// Hint: عميل HTTP قابل للاستبدال في الاختبارات
+  http.Client httpClient = http.Client();
+
+  static const Duration requestTimeout = Duration(seconds: 30);
+  static const Duration uploadTimeout = Duration(seconds: 120);
+
   String _baseUrl = AppConstants.defaultBaseUrl;
   String? _token;
 
-  /// Hint: رد نداء يتم استدعاؤه تلقائياً عند انتهاء صلاحية الجلسة (401 Unauthorized) لتسجيل الخروج الفوري
+  /// Hint: يُستدعى عند انتهاء الجلسة أو تعطيل الحساب (401) لتسجيل الخروج الفوري
   VoidCallback? onUnauthorized;
+
+  /// Hint: يُستدعى عند رد الخادم بوضع الصيانة (503) لعرض شاشة الصيانة فوراً
+  VoidCallback? onMaintenance;
+
+  /// Hint: يُستدعى عندما يطلب الخادم تغيير كلمة المرور المؤقتة
+  VoidCallback? onPasswordChangeRequired;
 
   String get baseUrl => _baseUrl;
   String? get token => _token;
+
+  /// Hint: أصل الخادم بدون اللاحقة /api (لروابط الصور والمرفقات)
+  String get serverOrigin => _baseUrl.endsWith('/api') ? _baseUrl.substring(0, _baseUrl.length - 4) : _baseUrl;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -32,10 +48,10 @@ class ApiClient {
       if (Uri.base.port == 5000 || Uri.base.host.toLowerCase().contains('nociraq')) {
         _baseUrl = '$origin/api';
       } else {
-        // في وضع التطوير (Flutter Run على منفذ عشوائي مثل 54431)
+        // في وضع التطوير (Flutter Run على منفذ عشوائي)
         _baseUrl = 'http://localhost:5000/api';
       }
-    } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
       // في محاكي الأندرويد: localhost للحاسوب المضيف يُعبر عنه بـ 10.0.2.2
       _baseUrl = 'http://10.0.2.2:5000/api';
     } else {
@@ -59,7 +75,7 @@ class ApiClient {
     }
   }
 
-  Map<String, String> _headers([Map<String, String>? extra]) {
+  Map<String, String> _headers() {
     final h = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -67,63 +83,58 @@ class ApiClient {
     if (_token != null && _token!.isNotEmpty) {
       h['Authorization'] = 'Bearer $_token';
     }
-    if (extra != null) h.addAll(extra);
     return h;
   }
 
-  Future<dynamic> get(String endpoint) async {
-    final uri = Uri.parse('$_baseUrl$endpoint');
-    final res = await http.get(uri, headers: _headers());
-    return _handleResponse(res, endpoint: endpoint);
+  Future<dynamic> get(String endpoint) {
+    return _send(endpoint, () => httpClient.get(Uri.parse('$_baseUrl$endpoint'), headers: _headers()));
   }
 
-  Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
-    final uri = Uri.parse('$_baseUrl$endpoint');
-    final res = await http.post(
-      uri,
-      headers: _headers(),
-      body: jsonEncode(body),
-    );
-    return _handleResponse(res, endpoint: endpoint);
+  Future<dynamic> post(String endpoint, Map<String, dynamic> body) {
+    return _send(endpoint, () => httpClient.post(Uri.parse('$_baseUrl$endpoint'), headers: _headers(), body: jsonEncode(body)));
   }
 
-  Future<dynamic> put(String endpoint, Map<String, dynamic> body) async {
-    final uri = Uri.parse('$_baseUrl$endpoint');
-    final res = await http.put(
-      uri,
-      headers: _headers(),
-      body: jsonEncode(body),
-    );
-    return _handleResponse(res, endpoint: endpoint);
+  Future<dynamic> put(String endpoint, Map<String, dynamic> body) {
+    return _send(endpoint, () => httpClient.put(Uri.parse('$_baseUrl$endpoint'), headers: _headers(), body: jsonEncode(body)));
   }
 
-  Future<dynamic> delete(String endpoint) async {
-    final uri = Uri.parse('$_baseUrl$endpoint');
-    final res = await http.delete(uri, headers: _headers());
-    return _handleResponse(res, endpoint: endpoint);
+  Future<dynamic> delete(String endpoint) {
+    return _send(endpoint, () => httpClient.delete(Uri.parse('$_baseUrl$endpoint'), headers: _headers()));
   }
 
-  /// Hint: رفع ملف كشف البصمة اليومي عبر MultipartRequest
-  Future<dynamic> uploadFile(String endpoint, List<int> bytes, String filename) async {
-    final uri = Uri.parse('$_baseUrl$endpoint');
-    final req = http.MultipartRequest('POST', uri);
+  /// Hint: رفع ملف عبر MultipartRequest بمهلة أطول
+  Future<dynamic> uploadFile(String endpoint, List<int> bytes, String filename) {
+    return _send(endpoint, () async {
+      final req = http.MultipartRequest('POST', Uri.parse('$_baseUrl$endpoint'));
+      if (_token != null) {
+        req.headers['Authorization'] = 'Bearer $_token';
+      }
+      req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      final streamedRes = await httpClient.send(req);
+      return http.Response.fromStream(streamedRes);
+    }, timeout: uploadTimeout);
+  }
 
-    if (_token != null) {
-      req.headers['Authorization'] = 'Bearer $_token';
+  /// Hint: طلب رابط تنزيل مؤقت (صالح 60 ثانية) بدل وضع رمز الجلسة في الرابط
+  /// kind: export-daily | export-monthly | backup
+  Future<String> downloadUrl(String kind, Map<String, dynamic> params) async {
+    final res = await post('/downloads/ticket', {'kind': kind, 'params': params});
+    return '$_baseUrl${res['url']}';
+  }
+
+  Future<dynamic> _send(String endpoint, Future<http.Response> Function() request, {Duration timeout = requestTimeout}) async {
+    http.Response res;
+    try {
+      res = await request().timeout(timeout);
+    } on TimeoutException {
+      throw ApiException('انتهت مهلة الاتصال بالخادم، يرجى التحقق من الشبكة والمحاولة مجدداً', statusCode: 408);
+    } on http.ClientException {
+      throw ApiException('تعذر الاتصال بالخادم، يرجى التحقق من تشغيله ومن عنوانه', statusCode: 0);
     }
-
-    req.files.add(http.MultipartFile.fromBytes(
-      'file',
-      bytes,
-      filename: filename,
-    ));
-
-    final streamedRes = await req.send();
-    final res = await http.Response.fromStream(streamedRes);
     return _handleResponse(res, endpoint: endpoint);
   }
 
-  /// Hint: معالجة استجابات الخادم الموحدة مع التوجيه التلقائي لشاشة الدخول عند انتهاء الجلسة (401)
+  /// Hint: معالجة الاستجابات الموحدة مع التوجيه التلقائي عند انتهاء الجلسة أو الصيانة
   dynamic _handleResponse(http.Response res, {String endpoint = ''}) {
     dynamic decoded;
     try {
@@ -133,25 +144,32 @@ class ApiClient {
     }
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      return decoded['data'] ?? decoded;
-    } else {
-      if (res.statusCode == 401 &&
-          !endpoint.startsWith('/auth/login') &&
-          !endpoint.startsWith('/auth/verify-password')) {
-        onUnauthorized?.call();
-      }
-      final msg = decoded is Map && decoded['message'] != null
-          ? decoded['message']
-          : 'خطأ في الاتصال (${res.statusCode})';
-      throw ApiException(msg, statusCode: res.statusCode);
+      return decoded is Map ? (decoded['data'] ?? decoded) : decoded;
     }
+
+    final code = decoded is Map ? decoded['code']?.toString() : null;
+    final isAuthEndpoint = endpoint.startsWith('/auth/login');
+
+    if (res.statusCode == 401 && !isAuthEndpoint) {
+      onUnauthorized?.call();
+    } else if (res.statusCode == 503 && code == 'MAINTENANCE') {
+      onMaintenance?.call();
+    } else if (res.statusCode == 403 && code == 'PASSWORD_CHANGE_REQUIRED') {
+      onPasswordChangeRequired?.call();
+    }
+
+    final msg = decoded is Map && decoded['message'] != null
+        ? decoded['message'].toString()
+        : 'خطأ في الاتصال (${res.statusCode})';
+    throw ApiException(msg, statusCode: res.statusCode, code: code);
   }
 }
 
 class ApiException implements Exception {
   final String message;
   final int statusCode;
-  ApiException(this.message, {this.statusCode = 400});
+  final String? code;
+  ApiException(this.message, {this.statusCode = 400, this.code});
 
   @override
   String toString() => message;
