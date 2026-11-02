@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>الموسوعة الهيكلية والمعمارية الحية | نظام كشف حضور وانصراف موظفي المقر</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>خريطة الملفات | نظام حضور موظفي المقر</title>
+  <!-- ملف مولَّد تلقائياً من toolkit/generate_file_tree.py — لا تعدّله يدوياً -->
   <style>
     :root {
       --bg-base: #0a0f1d;
@@ -699,910 +697,251 @@
   </style>
 </head>
 <body>
-
-  <!-- Header -->
   <header>
     <div class="header-container">
       <div class="brand-section">
         <div class="brand-logo">🏛️</div>
         <div class="brand-info">
-          <h1>
-            الموسوعة المعمارية الحية لنظام كشف الحضور
-            <span class="badge badge-success">إصدار الإنتاج 2.0.0</span>
-          </h1>
-          <p>اللجنة الأولمبية الوطنية العراقية (NOCI) • توثيق تفاعلي لحظي محدّث ومطابق للكود</p>
+          <h1>خريطة ملفات نظام حضور موظفي المقر <span class="badge badge-success">الإصدار 2.0.0</span></h1>
+          <p>اللجنة الأولمبية الوطنية العراقية (NOCI) • آخر تحديث 2026-11-02 • مطابقة للكود</p>
         </div>
       </div>
       <div class="header-actions">
         <div class="search-box">
-          <input type="text" id="globalSearch" placeholder="ابحث عن ملف، دالة، مسار API، أو متغير...">
+          <input type="text" id="globalSearch" placeholder="ابحث عن ملف، مسار API، جدول، أو معرف...">
           <span class="search-icon">🔍</span>
         </div>
-        <a href="http://localhost:5000" target="_blank" class="btn btn-primary">
-          <span>🚀 فتح النظام الحي (5000)</span>
-        </a>
+        <a href="http://localhost:5000" target="_blank" class="btn btn-primary"><span>🚀 فتح النظام (5000)</span></a>
       </div>
     </div>
   </header>
 
-  <!-- KPI Stats Bar -->
-  <div class="stats-bar">
-    <div class="stats-container">
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--primary-light); color: var(--primary);">📱</div>
-        <div class="stat-info">
-          <div class="stat-value">22+ شاشة وويدجت</div>
-          <div class="stat-label">واجهة فلاتر (Web & Desktop)</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--success-light); color: var(--success);">⚙️</div>
-        <div class="stat-info">
-          <div class="stat-value">32 مسار API</div>
-          <div class="stat-label">Express.js & REST Endpoints</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--purple-light); color: var(--purple);">🧠</div>
-        <div class="stat-info">
-          <div class="stat-value">محرك الذكاء الاصطناعي</div>
-          <div class="stat-label">attendanceEngine (أوف، تأخير، إجازات)</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--warning-light); color: var(--warning);">🛡️</div>
-        <div class="stat-info">
-          <div class="stat-value">0 مشاكل في VS Code</div>
-          <div class="stat-label">No issues found (100% Clean)</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: rgba(234, 179, 8, 0.15); color: var(--gold);">💾</div>
-        <div class="stat-info">
-          <div class="stat-value">SQLite WAL مشفر</div>
-          <div class="stat-label">AES-256-GCM + Bcrypt</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Body -->
   <div class="app-body">
-    <!-- Sidebar Navigation -->
     <aside class="sidebar-nav">
-      <div class="nav-title">أقسام الموسوعة المعمارية</div>
+      <div class="nav-title">الأقسام</div>
       <ul class="nav-list">
-        <li class="nav-item">
-          <button class="active" onclick="switchTab('treeTab', this)">
-            <span>🌳 الشجرة الهيكلية المنقحة</span>
-            <span class="nav-count">الملفات</span>
-          </button>
-        </li>
-        <li class="nav-item">
-          <button onclick="switchTab('frontendTab', this)">
-            <span>📱 الواجهة الأمامية (Flutter)</span>
-            <span class="nav-count">app/lib</span>
-          </button>
-        </li>
-        <li class="nav-item">
-          <button onclick="switchTab('backendTab', this)">
-            <span>⚙️ الخادم ومحرك الذكاء</span>
-            <span class="nav-count">backend/src</span>
-          </button>
-        </li>
-        <li class="nav-item">
-          <button onclick="switchTab('matrixTab', this)">
-            <span>🔗 مصفوفة الارتباط التتبعي</span>
-            <span class="nav-count">Traceability</span>
-          </button>
-        </li>
-        <li class="nav-item">
-          <button onclick="switchTab('identifiersTab', this)">
-            <span>📖 قاموس المعرفات والمتغيرات</span>
-            <span class="nav-count">Dictionary</span>
-          </button>
-        </li>
-        <li class="nav-item">
-          <button onclick="switchTab('scriptsTab', this)">
-            <span>🚀 السكربتات وأوامر التشغيل</span>
-            <span class="nav-count">BAT / VBS</span>
-          </button>
-        </li>
-        <li class="nav-item">
-          <button onclick="switchTab('auditTab', this)">
-            <span>⚖️ الجرد: الفعال مقابل المؤجل</span>
-            <span class="nav-count">Inventory</span>
-          </button>
-        </li>
+<li class="nav-item"><button class="active" onclick="switchTab('treeTab', this)"><span>🌳 الشجرة الهيكلية</span><span class="nav-count">الملفات</span></button></li>
+<li class="nav-item"><button onclick="switchTab('frontendTab', this)"><span>📱 الواجهة الأمامية</span><span class="nav-count">app/lib</span></button></li>
+<li class="nav-item"><button onclick="switchTab('backendTab', this)"><span>⚙️ الخادم والمحرك</span><span class="nav-count">backend/src</span></button></li>
+<li class="nav-item"><button onclick="switchTab('matrixTab', this)"><span>🔗 مصفوفة الارتباط</span><span class="nav-count">Traceability</span></button></li>
+<li class="nav-item"><button onclick="switchTab('identifiersTab', this)"><span>📖 قاموس المعرفات</span><span class="nav-count">Dictionary</span></button></li>
+<li class="nav-item"><button onclick="switchTab('scriptsTab', this)"><span>🚀 السكربتات والأوامر</span><span class="nav-count">Scripts</span></button></li>
+<li class="nav-item"><button onclick="switchTab('auditTab', this)"><span>⚖️ الجرد</span><span class="nav-count">Inventory</span></button></li>
       </ul>
     </aside>
-
-    <!-- Main Content Panes -->
     <main class="content-area">
-
-      <!-- TAB 1: Tree View -->
-      <section id="treeTab" class="tab-pane active">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">🌳 الشجرة الهيكلية المنقحة والمعتمدة (Clean File Tree)</h2>
-              <p class="section-subtitle">شجرة فيزيائية تفاعلية للمشروع بدون أي مجلدات مكررة أو تالفة. انقر على المجلد لفتحه أو طيّه.</p>
-            </div>
-            <div class="tree-toolbar">
-              <button class="btn" onclick="expandAllTree()">توسيع الكل ➕</button>
-              <button class="btn" onclick="collapseAllTree()">طي الكل ➖</button>
-            </div>
-          </div>
-
-          <div class="tree-view" id="interactiveTree">
-            <!-- Root -->
-            <div class="tree-node">
-              <div class="tree-item folder" onclick="toggleNode(this)">
-                <span>📁 D:\Employee NOCI</span>
-                <span class="badge badge-primary">المجلد الجذري للمشروع</span>
-              </div>
-              <div class="tree-children">
-
-                <!-- APP -->
-                <div class="tree-node">
-                  <div class="tree-item folder" onclick="toggleNode(this)">
-                    <span>📁 app/</span>
-                    <span class="badge badge-success">تطبيق فلاتر</span>
-                  </div>
-                  <div class="tree-children">
-                    <!-- lib -->
-                    <div class="tree-node">
-                      <div class="tree-item folder" onclick="toggleNode(this)">
-                        <span>📁 lib/</span>
-                        <span class="badge badge-success">الشيفرة المصدرية Dart</span>
-                      </div>
-                      <div class="tree-children">
-                        <div class="tree-node">
-                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 core/</span></div>
-                          <div class="tree-children">
-                            <div class="tree-item file" onclick="showFileDetail('api_client')"><span>📄 api_client.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('auth_provider')"><span>📄 auth_provider.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('constants')"><span>📄 constants.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('theme')"><span>📄 theme.dart</span><span class="tag-active">نشط</span></div>
-                          </div>
-                        </div>
-                        <div class="tree-node">
-                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 features/</span></div>
-                          <div class="tree-children">
-                            <div class="tree-item file" onclick="showFileDetail('attendance_screen')"><span>📄 attendance_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('employees_screen')"><span>📄 employees_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('leaves_screen')"><span>📄 leaves_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('schedules_screen')"><span>📄 schedules_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('chat_screen')"><span>📄 chat_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('settings_screen')"><span>📄 settings_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('reports_screen')"><span>📄 reports_screen.dart</span><span class="tag-active">نشط</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('dashboard_screen')"><span>📄 dashboard_screen.dart</span><span class="tag-active">نشط</span></div>
-                          </div>
-                        </div>
-                        <div class="tree-node">
-                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 shared/</span></div>
-                          <div class="tree-children">
-                            <div class="tree-item file"><span>📄 custom_button.dart</span></div>
-                            <div class="tree-item file"><span>📄 kpi_card.dart</span></div>
-                            <div class="tree-item file"><span>📄 main_layout.dart</span></div>
-                            <div class="tree-item file"><span>📄 status_badge.dart</span></div>
-                          </div>
-                        </div>
-                        <div class="tree-item file"><span>📄 main.dart</span><span class="tag-active">نقطة الانطلاق</span></div>
-                      </div>
-                    </div>
-
-                    <!-- platforms -->
-                    <div class="tree-node">
-                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 web/</span><span class="tag-active">نشط (Production)</span></div>
-                    </div>
-                    <div class="tree-node">
-                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 windows/</span><span class="tag-future">مجهز لسطح المكتب</span></div>
-                    </div>
-                    <div class="tree-node">
-                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 android / ios / macos / linux/</span><span class="tag-future">مجهز للمستقبل</span></div>
-                    </div>
-                    <div class="tree-item file"><span>⚙️ analysis_options.yaml</span><span class="tag-active">0 Issues</span></div>
-                    <div class="tree-item file"><span>⚙️ pubspec.yaml</span></div>
-                  </div>
-                </div>
-
-                <!-- BACKEND -->
-                <div class="tree-node">
-                  <div class="tree-item folder" onclick="toggleNode(this)">
-                    <span>📁 backend/</span>
-                    <span class="badge badge-purple">خادم Node.js & Express</span>
-                  </div>
-                  <div class="tree-children">
-                    <div class="tree-node">
-                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 data/</span></div>
-                      <div class="tree-children">
-                        <div class="tree-item file"><span>💾 attendance.db (قاعدة البيانات المشفرة)</span><span class="tag-active">نشط</span></div>
-                        <div class="tree-item file"><span>📁 backups/ (النسخ الاحتياطية)</span></div>
-                        <div class="tree-item file"><span>📁 branding/ (شعارات المؤسسة)</span></div>
-                        <div class="tree-item file"><span>📁 temp_uploads/ (معالجة مؤقتة)</span></div>
-                      </div>
-                    </div>
-                    <div class="tree-node">
-                      <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 src/</span></div>
-                      <div class="tree-children">
-                        <div class="tree-node">
-                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 core/</span></div>
-                          <div class="tree-children">
-                            <div class="tree-item file" onclick="showFileDetail('database')"><span>📄 database.js</span><span class="tag-active">SQLite WAL</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('crypto')"><span>📄 cryptoHelper.js</span><span class="tag-active">AES-256 + Bcrypt</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('auth_mid')"><span>📄 authMiddleware.js</span><span class="tag-active">الصيانة والتوكن</span></div>
-                            <div class="tree-item file" onclick="showFileDetail('audit')"><span>📄 auditLogger.js</span><span class="tag-active">التدقيق الأمني</span></div>
-                          </div>
-                        </div>
-                        <div class="tree-node">
-                          <div class="tree-item folder" onclick="toggleNode(this)"><span>📁 features/</span></div>
-                          <div class="tree-children">
-                            <div class="tree-item file" onclick="showFileDetail('engine')"><span>🧠 attendanceEngine.js</span><span class="tag-active">خوارزمية الذكاء</span></div>
-                            <div class="tree-item file"><span>📄 attendanceController.js & Routes</span></div>
-                            <div class="tree-item file"><span>📄 employeeController.js & Routes</span></div>
-                            <div class="tree-item file"><span>📄 settingController.js & Routes</span></div>
-                            <div class="tree-item file"><span>📄 backupController.js & Routes</span></div>
-                            <div class="tree-item file"><span>📄 chatController.js & Routes</span></div>
-                            <div class="tree-item file"><span>📄 leaveController.js & Routes</span></div>
-                            <div class="tree-item file"><span>📄 scheduleController.js & Routes</span></div>
-                          </div>
-                        </div>
-                        <div class="tree-item file"><span>📄 app.js</span><span class="tag-active">سيرفر المنفذ 5000</span></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- PLANS & DOCS -->
-                <div class="tree-node">
-                  <div class="tree-item folder" onclick="toggleNode(this)">
-                    <span>📁 خطط/</span>
-                    <span class="badge badge-primary">التوثيق المعماري والخطط</span>
-                  </div>
-                  <div class="tree-children">
-                    <div class="tree-item file"><span>📝 المرجع_الشامل_والدليل_التشغيلي_المعتمد.md</span><span class="tag-active">محدث</span></div>
-                    <div class="tree-item file"><span>📝 خطة_الإصلاح_الشامل_والفحص_الأمني.md</span><span class="tag-active">جديد</span></div>
-                    <div class="tree-item file"><span>📝 سجل_الإنجاز_والمشاكل_والحلول.md</span><span class="tag-active">محدث</span></div>
-                    <div class="tree-item file"><span>📝 خطة_التعديلات_المرحلة_2.md</span></div>
-                    <div class="tree-item file"><span>📝 دليل_البناء_والنشر_ويندوز_وماك.md</span></div>
-                  </div>
-                </div>
-
-                <!-- ROOT SCRIPTS -->
-                <div class="tree-item file" onclick="showFileDetail('run_bat')"><span>⚡ تشغيل النظام.bat</span><span class="tag-active">تشغيل تلقائي</span></div>
-                <div class="tree-item file" onclick="showFileDetail('stop_bat')"><span>🛑 إيقاف النظام.bat</span><span class="tag-active">إغلاق آمن</span></div>
-                <div class="tree-item file"><span>📝 PROJECT_RULES.md</span></div>
-                <div class="tree-item file"><span>📝 README.md</span></div>
-
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 2: Frontend Anatomy -->
-      <section id="frontendTab" class="tab-pane">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">📱 التشريح المفصل للواجهة الأمامية (Flutter Architecture)</h2>
-              <p class="section-subtitle">شرح وظيفي ومعماري لكل شاشة وويدجت، بماذا ترتبط ولماذا صممت بهذه الشاكلة.</p>
-            </div>
-          </div>
-
-          <div class="cards-grid">
-            <!-- Card 1 -->
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">
-                  <span>كشف الحضور والتحليل</span>
-                </div>
-                <span class="code-badge">attendance_screen.dart</span>
-              </div>
-              <p class="card-desc">الشاشة التشغيلية اليومية لمدخل البيانات والسوبر أدمن. تعرض تفاصيل حضور وانصراف الموظفين لليوم المختار مع إحصائيات سريعة وأزرار الاعتماد وتعديل الوقت.</p>
-              <div class="card-links">
-                <div class="card-links-row">
-                  <span class="card-links-label">المسارات:</span>
-                  <span class="badge-route post">POST /api/attendance/approve</span>
-                  <span class="badge-route get">GET /api/attendance/sheets/:date</span>
-                </div>
-                <div class="card-links-row">
-                  <span class="card-links-label">الجداول:</span>
-                  <span>daily_sheets, attendance_records</span>
-                </div>
-              </div>
-              <div class="card-why">
-                <strong>لماذا صممت هكذا؟</strong> لفصل مرحلة قراءة البصمات في الذاكرة عن مرحلة الحفظ الدائم، مع حظر إعادة اعتماد كشف سبق اعتماده إلا بإذن السوبر أدمن الصريح.
-              </div>
-            </div>
-
-            <!-- Card 2 -->
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">
-                  <span>سجل الموظفين الذكي</span>
-                </div>
-                <span class="code-badge">employees_screen.dart</span>
-              </div>
-              <p class="card-desc">سجل الأسماء المعتمد للمقر، مزود بخاصية التلوين الذكي التلقائي للخلايا (أزرق للإجازة السارية، برتقالي للتنسيب، أحمر للمتوفى أو منتهي الخدمة، رمادي لـ VIP).</p>
-              <div class="card-links">
-                <div class="card-links-row">
-                  <span class="card-links-label">المسارات:</span>
-                  <span class="badge-route get">GET /api/employees</span>
-                  <span class="badge-route put">PUT /api/employees/:id</span>
-                </div>
-                <div class="card-links-row">
-                  <span class="card-links-label">الجداول:</span>
-                  <span>employees, leave_requests, system_settings</span>
-                </div>
-              </div>
-              <div class="card-why">
-                <strong>لماذا صممت هكذا؟</strong> لتمكين مسؤول الموارد البشرية من مسح حالات مئات الموظفين بصرياً في ثانية واحدة دون فتح ملفاتهم بشكل منفرد.
-              </div>
-            </div>
-
-            <!-- Card 3 -->
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">
-                  <span>إدارة قوالب وجداول الدوام</span>
-                </div>
-                <span class="code-badge">schedules_screen.dart</span>
-              </div>
-              <p class="card-desc">تتيح لمدخل البيانات والسوبر أدمن إدارة شفتات الموظفين وتخصيص أيام الراحة الأسبوعية (يوم، يومين، أو أكثر). وتحتوي على زر مقفل لإدارة القوالب المركزية.</p>
-              <div class="card-links">
-                <div class="card-links-row">
-                  <span class="card-links-label">المسارات:</span>
-                  <span class="badge-route get">GET /api/schedules</span>
-                  <span class="badge-route post">POST /api/schedules/batch</span>
-                </div>
-                <div class="card-links-row">
-                  <span class="card-links-label">الجداول:</span>
-                  <span>work_schedules, schedule_templates</span>
-                </div>
-              </div>
-              <div class="card-why">
-                <strong>لماذا صممت هكذا؟</strong> زر "إدارة قوالب الدوام" لا يظهر لمدخل البيانات منعاً لتغيير ساعات الدوام الرسمية للمؤسسة، مع إتاحة حرية توزيع الموظفين أسبوعياً.
-              </div>
-            </div>
-
-            <!-- Card 4 -->
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">
-                  <span>المحادثات وسجل الرقابة</span>
-                </div>
-                <span class="code-badge">chat_screen.dart</span>
-              </div>
-              <p class="card-desc">تواصل فوري مشفر بين المستخدمين مع شارة إشعار بالرسائل الجديدة، وقسم خاص بسجل الرقابة الشاملة للسوبر أدمن محمي بتأكيد كلمة المرور الحية.</p>
-              <div class="card-links">
-                <div class="card-links-row">
-                  <span class="card-links-label">المسارات:</span>
-                  <span class="badge-route post">POST /api/chat/verify-superadmin</span>
-                  <span class="badge-route get">GET /api/chat/messages</span>
-                </div>
-                <div class="card-links-row">
-                  <span class="card-links-label">الجداول:</span>
-                  <span>chat_messages (AES-256-GCM Encrypted)</span>
-                </div>
-              </div>
-              <div class="card-why">
-                <strong>لماذا صممت هكذا؟</strong> لحماية خصوصية المحادثات ومطابقة اللوائح الأمنية المشددة بحيث لا يمكن لأحد استراق النظر حتى لو كان جهاز السوبر أدمن مفتوحاً.
-              </div>
-            </div>
-
-            <!-- Card 5 -->
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">
-                  <span>الإعدادات والنسخ الاحتياطي</span>
-                </div>
-                <span class="code-badge">settings_screen.dart</span>
-              </div>
-              <p class="card-desc">تحكم كامل بالهوية المؤسسية، تخصيص درجات ألوان الحالات، تفعيل وضع الصيانة، وأخذ نسخ احتياطية وتنزيلها واستعادتها بكلمة سر مؤكدة.</p>
-              <div class="card-links">
-                <div class="card-links-row">
-                  <span class="card-links-label">المسارات:</span>
-                  <span class="badge-route post">POST /api/backup/create</span>
-                  <span class="badge-route post">POST /api/backup/restore</span>
-                </div>
-                <div class="card-links-row">
-                  <span class="card-links-label">الجداول:</span>
-                  <span>system_settings, database dump</span>
-                </div>
-              </div>
-              <div class="card-why">
-                <strong>لماذا صممت هكذا؟</strong> لتوفير لوحة تحكم سيادية شاملة للسوبر أدمن تضمن استمرارية العمل ومنع ضياع البيانات تحت أي ظرف طارئ.
-              </div>
-            </div>
-
-            <!-- Card 6 -->
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">
-                  <span>تسجيل الدخول ووضع الصيانة</span>
-                </div>
-                <span class="code-badge">login_screen.dart & maintenance_screen.dart</span>
-              </div>
-              <p class="card-desc">تسجيل دخول آمن بحقول فارغة افتراضياً، مع خيار "تذكر بياناتي" عبر التخزين المحلي، واعتراض فوري وإظهار شاشة الصيانة إذا كان النظام تحت الصيانة.</p>
-              <div class="card-links">
-                <div class="card-links-row">
-                  <span class="card-links-label">المسارات:</span>
-                  <span class="badge-route post">POST /api/auth/login</span>
-                  <span class="badge-route get">GET /api/system/status</span>
-                </div>
-                <div class="card-links-row">
-                  <span class="card-links-label">الجداول:</span>
-                  <span>users, SharedPreferences</span>
-                </div>
-              </div>
-              <div class="card-why">
-                <strong>لماذا صممت هكذا؟</strong> لمنع أي مستخدم عادي من محاولة إدخال بيانات أثناء ترقية النظام أو جرد البيانات السنوي.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 3: Backend & Engine -->
-      <section id="backendTab" class="tab-pane">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">⚙️ الخادم ومحرك الذكاء الاصطناعي (Backend & Intelligence Engine)</h2>
-              <p class="section-subtitle">شرح آليات المعالجة الرياضية وقواعد البيانات والتشفير العسكري.</p>
-            </div>
-          </div>
-
-          <div class="cards-grid">
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">🧠 محرك احتساب الحضور الذكي</div>
-                <span class="code-badge">attendanceEngine.js</span>
-              </div>
-              <p class="card-desc">العقل المفكر للنظام؛ يحلل أوقات الدوام مقابل البصمة المسجلة، ويحسب دقائق التأخير بعد اقتطاع فترة السماح، ويفحص سجلات الإجازات لليوم تلقائياً لعدم احتساب المجاز غائباً، ويضع ملاحظة على من يبصم في يوم راحته الأسبوعية (الأوف).</p>
-              <div class="card-why">
-                <strong>الربط المعماري:</strong> يُستدعى من `attendanceController.js` أثناء معالجة ملف الإكسل المرفوع، ويغذي واجهة الكشف بمصفوفة النتائج الجاهزة.
-              </div>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">🛡️ التشفير العسكري الثنائي</div>
-                <span class="code-badge">cryptoHelper.js</span>
-              </div>
-              <p class="card-desc">يطبق تشفير AES-256-GCM للبيانات الحساسة والمحادثات مع قيمة IV فريدة لكل رسالة مشفرة، وتجزئة كلمات المرور عبر Bcrypt مع 10 جولات تمليح (Salt).</p>
-              <div class="card-why">
-                <strong>الربط المعماري:</strong> يحمي بيانات موظفي المقر من أي محاولة تسريب أو فتح مباشر لملف قاعدة البيانات خارج النظام.
-              </div>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">💾 محرك SQLite عالي السرعة</div>
-                <span class="code-badge">database.js</span>
-              </div>
-              <p class="card-desc">اتصال دائم عبر مكتبة better-sqlite3 المفعلة لوضع WAL (Write-Ahead Logging)، مع بناء تلقائي للجداول العشرة والمؤشرات لتسريع الاستعلامات المعقدة في أجزاء من الألف من الثانية.</p>
-              <div class="card-why">
-                <strong>الربط المعماري:</strong> هو المستودع المركزي الذي تستند عليه كافة وحدات التحكم لقراءة وتعديل البيانات محلياً.
-              </div>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">🚦 جدار الحماية والتحقق</div>
-                <span class="code-badge">authMiddleware.js</span>
-              </div>
-              <p class="card-desc">يعترض كل طلب وارد للسيرفر: يتحقق من صلاحية التوكن JWT، ويتحقق مما إذا كان وضع الصيانة مفعلاً لحظر مدخلي البيانات فوراً وإرجاع كود 503.</p>
-              <div class="card-why">
-                <strong>الربط المعماري:</strong> يحمي كل المسارات الحساسة ويمنع أي وصول غير مصرح للمعلومات الإدارية.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 4: Traceability Matrix -->
-      <section id="matrixTab" class="tab-pane">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">🔗 مصفوفة الارتباط التتبعي الشامل (End-to-End Traceability Matrix)</h2>
-              <p class="section-subtitle">جدول يربط بين كل زر وشاشة في فلاتر والمسار والوحدة والجدول المعني ولماذا تم ربطها بهذا الشكل.</p>
-            </div>
-          </div>
-
-          <div class="table-responsive">
-            <table id="matrixTable">
-              <thead>
-                <tr>
-                  <th>العملية والوظيفة</th>
-                  <th>شاشة فلاتر (Frontend Widget)</th>
-                  <th>مزود الخدمة</th>
-                  <th>مسار الـ API (Express Route)</th>
-                  <th>وحدة التحكم (Controller)</th>
-                  <th>جدول قاعدة البيانات (SQLite)</th>
-                  <th>السبب الهندسي والمنطقي للربط</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>تسجيل الدخول</strong></td>
-                  <td><code>login_screen.dart</code></td>
-                  <td>AuthProvider</td>
-                  <td><span class="badge-route post">POST /api/auth/login</span></td>
-                  <td>authController.login</td>
-                  <td><code>users</code></td>
-                  <td>مطابقة كلمة السر بـ Bcrypt وتوليد JWT لتحديد هوية وصلاحيات الجلسة.</td>
-                </tr>
-                <tr>
-                  <td><strong>تذكر الحساب</strong></td>
-                  <td><code>login_screen.dart</code> (Checkbox)</td>
-                  <td>SharedPreferences</td>
-                  <td><span class="badge badge-primary">Client-side Local</span></td>
-                  <td>محلي في المتصفح</td>
-                  <td><code>localStorage</code></td>
-                  <td>حفظ بيانات المستخدم في المتصفح لعدم طلبها مجدداً عند إعادة التحميل.</td>
-                </tr>
-                <tr>
-                  <td><strong>رفع كشف البصمة</strong></td>
-                  <td><code>upload_dialog.dart</code></td>
-                  <td>ApiClient.uploadMultipart</td>
-                  <td><span class="badge-route post">POST /api/attendance/analyze-upload</span></td>
-                  <td>attendanceController.analyzeUpload</td>
-                  <td><code>temp_uploads</code></td>
-                  <td>تحليل إكسل البصمة في الذاكرة دون تخزينه حتى يوافق المستخدم على الكشف.</td>
-                </tr>
-                <tr>
-                  <td><strong>اعتماد وحفظ الكشف</strong></td>
-                  <td><code>attendance_screen.dart</code></td>
-                  <td>ApiClient.post</td>
-                  <td><span class="badge-route post">POST /api/attendance/approve</span></td>
-                  <td>attendanceController.approveSheet</td>
-                  <td><code>daily_sheets, attendance_records</code></td>
-                  <td>تثبيت بيانات اليوم، ومنع التعديل إلا للسوبر أدمن أو من يملك صلاحية منه.</td>
-                </tr>
-                <tr>
-                  <td><strong>تلوين سجل الموظفين</strong></td>
-                  <td><code>employees_screen.dart</code></td>
-                  <td>ApiClient.get</td>
-                  <td><span class="badge-route get">GET /api/employees</span></td>
-                  <td>employeeController.getEmployees</td>
-                  <td><code>employees, leave_requests</code></td>
-                  <td>فحص تاريخ اليوم لاكتشاف الإجازات السارية أو التنسيب وتلوين الخلية تلقائياً.</td>
-                </tr>
-                <tr>
-                  <td><strong>تخصيص ألوان الحالات</strong></td>
-                  <td><code>settings_screen.dart</code></td>
-                  <td>ApiClient.put</td>
-                  <td><span class="badge-route put">PUT /api/settings/colors</span></td>
-                  <td>settingController.updateColors</td>
-                  <td><code>system_settings (status_colors)</code></td>
-                  <td>منح السوبر أدمن مرونة تامة لتعديل درجات الألوان بما يتوافق مع الإدارة.</td>
-                </tr>
-                <tr>
-                  <td><strong>حفظ وضع الصيانة</strong></td>
-                  <td><code>settings_screen.dart</code></td>
-                  <td>ApiClient.post</td>
-                  <td><span class="badge-route post">POST /api/settings/maintenance</span></td>
-                  <td>settingController.toggleMaintenance</td>
-                  <td><code>system_settings (is_maintenance)</code></td>
-                  <td>إغلاق النظام فورياً أمام المستخدمين العاديين أثناء التحديثات أو الجرد.</td>
-                </tr>
-                <tr>
-                  <td><strong>فك قفل الرقابة</strong></td>
-                  <td><code>chat_screen.dart</code></td>
-                  <td>ApiClient.post</td>
-                  <td><span class="badge-route post">POST /api/chat/verify-superadmin</span></td>
-                  <td>chatController.verifySuperAdmin</td>
-                  <td><code>users</code></td>
-                  <td>اشتراط كلمة مرور حية للسوبر أدمن قبل إظهار المحادثات لمنع التسلل.</td>
-                </tr>
-                <tr>
-                  <td><strong>النسخ الاحتياطي الفوري</strong></td>
-                  <td><code>settings_screen.dart</code></td>
-                  <td>ApiClient.post</td>
-                  <td><span class="badge-route post">POST /api/backup/create</span></td>
-                  <td>backupController.createBackup</td>
-                  <td><code>attendance.db dump</code></td>
-                  <td>تصدير نسخة كاملة آمنة من قاعدة البيانات وتخزينها محلياً مع خيار التنزيل.</td>
-                </tr>
-                <tr>
-                  <td><strong>استعادة نسخة سابقة</strong></td>
-                  <td><code>settings_screen.dart</code></td>
-                  <td>ApiClient.uploadMultipart</td>
-                  <td><span class="badge-route post">POST /api/backup/restore</span></td>
-                  <td>backupController.restoreBackup</td>
-                  <td><code>attendance.db replacement</code></td>
-                  <td>التعافي من أي خطأ غير مقصود بملف خارجي مع اشتراط إدخال كلمة سر السوبر أدمن.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 5: Identifiers Dictionary -->
-      <section id="identifiersTab" class="tab-pane">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">📖 قاموس المعرفات، المتغيرات الحاكمة، والرموز المشفرة</h2>
-              <p class="section-subtitle">شرح دقيق لكل معرّف ومتحول أساسي في قاعدة البيانات والشيفرة المصدرية.</p>
-            </div>
-          </div>
-
-          <div class="cards-grid">
-            <div class="feature-card">
-              <div class="card-top">
-                <span class="code-badge">emp_id</span>
-                <span class="badge badge-primary">Integer / Primary Key</span>
-              </div>
-              <p class="card-desc">المعرف الرقمي التسلسلي الفريد للموظف داخل قاعدة بيانات النظام، يربط كل سجلات الإجازات وجداول الدوام بملف الموظف.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <span class="code-badge">fingerprint_id</span>
-                <span class="badge badge-warning">Integer / Unique Index</span>
-              </div>
-              <p class="card-desc">رقم بصمة الموظف المسجل في جهاز البصمة الحقيقي، وهو الرابط الجوهري لمطابقة كشف الإكسل مع اسم الموظف وسجله في المقر.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <span class="code-badge">status</span>
-                <span class="badge badge-purple">Enum Text</span>
-              </div>
-              <p class="card-desc">حالة الموظف الحالية: <code>active</code> (ملاك المقر)، <code>seconded</code> / <code>تنسيب</code> (منسب)، <code>terminated</code> (إنهاء خدمة)، <code>deceased</code> (متوفى)، أو <code>vip</code>.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <span class="code-badge">is_maintenance</span>
-                <span class="badge badge-danger">Boolean (0 or 1)</span>
-              </div>
-              <p class="card-desc">المتغير العام للنظام في جدول <code>system_settings</code>؛ إذا كان 1 يتم حظر مدخلي البيانات فوراً وتحويلهم لشاشة الصيانة.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <span class="code-badge">delay_minutes</span>
-                <span class="badge badge-warning">Integer</span>
-              </div>
-              <p class="card-desc">دقائق التأخير الصافية المحسوبة بعد خصم فترة السماح المحددة في جدول الدوام لليوم المعني.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <span class="code-badge">status_colors</span>
-                <span class="badge badge-success">JSON Text</span>
-              </div>
-              <p class="card-desc">كائن JSON مخزن في جدول الإعدادات يحتوي على شفرات ألوان Hex التي يحددها السوبر أدمن لتلوين خلايا سجل الموظفين.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 6: Scripts & Operations -->
-      <section id="scriptsTab" class="tab-pane">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">🚀 دليل السكربتات وأوامر التشغيل والأتمتة</h2>
-              <p class="section-subtitle">شرح مفصل لكيفية تشغيل وإيقاف النظام وأتمتة الخدمات الخلفية.</p>
-            </div>
-          </div>
-
-          <div class="cards-grid">
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">تشغيل النظام بنقرة واحدة</div>
-                <span class="code-badge">تشغيل النظام.bat</span>
-              </div>
-              <p class="card-desc">يتحقق من خلو المنفذ 5000 وينهي أي عملية معلقة قديمة، ثم يشغل مخدم Node.js في الخلفية، ويتأكد من وصول حالة السيرفر إلى ONLINE 200 OK، ثم يفتح المتصفح الافتراضي تلقائياً على http://localhost:5000.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">إيقاف النظام الآمن</div>
-                <span class="code-badge">إيقاف النظام.bat</span>
-              </div>
-              <p class="card-desc">يبحث عن معرّف العملية (PID) النشطة على المنفذ 5000 ويغلقها فوراً بصورة نظيفة لتحرير موارد الجهاز ومنع أي استهلاك غير مرغوب للذاكرة العشوائية.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">التشغيل الصامت تماماً</div>
-                <span class="code-badge">toolkit/run-silent.vbs</span>
-              </div>
-              <p class="card-desc">سكربت VBScript مرن يقوم بتشغيل السيرفر في خلفية ويندوز دون إظهار الشاشة السوداء (CMD Window) على شاشة المستخدم.</p>
-            </div>
-
-            <div class="feature-card">
-              <div class="card-top">
-                <div class="card-title">خدمة بدء التشغيل التلقائي</div>
-                <span class="code-badge">toolkit/install-startup-service.bat</span>
-              </div>
-              <p class="card-desc">يسجل البرنامج في قائمة البرامج التي تبدأ تلقائياً مع إقلاع نظام ويندوز، ليعمل النظام فور تشغيل كمبيوتر الإدارة دون تدخل بشري.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 7: Active vs Future Audit -->
-      <section id="auditTab" class="tab-pane">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">⚖️ الجرد الشامل: العناصر الفعالة مقابل المؤجلة للمستقبل</h2>
-              <p class="section-subtitle">شفافية كاملة حول ما يعمل بالإنتاج حالياً بنسبة 100% وما هو مجهز للاستثمار المستقبلي.</p>
-            </div>
-          </div>
-
-          <div class="cards-grid">
-            <div class="feature-card" style="border-right: 4px solid var(--success);">
-              <div class="card-top">
-                <div class="card-title">🟢 المكونات الفعالة والنشطة بالإنتاج (100% Active)</div>
-              </div>
-              <ul style="padding-right: 1.25rem; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;">
-                <li><strong>تطبيق الويب (Flutter Web):</strong> مجمع في <code>backend/public</code> ويعمل بكفاءة على المتصفح.</li>
-                <li><strong>الخادم المركزي (Express.js):</strong> يستمع على المنفذ 5000 وينفذ كافة عمليات الـ REST.</li>
-                <li><strong>محرك الذكاء الاصطناعي (attendanceEngine):</strong> يحسب الحضور والتأخير والإجازات بدقة.</li>
-                <li><strong>قاعدة البيانات (attendance.db):</strong> نشطة بنمط WAL وتخزن كافة البيانات المشفرة.</li>
-                <li><strong>سكربتات التشغيل والإيقاف:</strong> معتمدة للاستخدام المباشر.</li>
-              </ul>
-            </div>
-
-            <div class="feature-card" style="border-right: 4px solid var(--purple);">
-              <div class="card-top">
-                <div class="card-title">🟣 المنصات المجهزة للاستثمار المستقبلي (Future Ready)</div>
-              </div>
-              <ul style="padding-right: 1.25rem; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;">
-                <li><strong>منصات الموبايل (Android / iOS):</strong> مجلداتها نظيفة ومجهزة؛ يمكن في أي وقت تجميع تطبيق محمول للمشرفين بأمر واحد <code>flutter build apk</code>.</li>
-                <li><strong>منصة سطح المكتب لويندوز (Windows Desktop):</strong> مجهزة في مجلد <code>app/windows</code> للبناء المكتبي التنفيذي المستقل (.exe).</li>
-                <li><strong>سكربتات الفحص القديمة (test_*.js):</strong> محفوظة في <code>backend/scripts</code> كأدوات فحص دورية عند ترقية النظام.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
+<section id="treeTab" class="tab-pane active">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">🌳 الشجرة الهيكلية</h2><p class="section-subtitle">انقر على أي مجلد لفتحه أو طيّه.</p></div>
+      <div class="tree-toolbar"><button class="btn" onclick="expandAllTree()">توسيع الكل ➕</button><button class="btn" onclick="collapseAllTree()">طي الكل ➖</button></div>
+    </div>
+    <div class="tree-view" id="interactiveTree"><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 D:\Employee NOCI</span><span class="badge badge-primary">المجلد الجذري للمشروع</span></div><div class="tree-children"><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 app/</span><span class="badge badge-primary">تطبيق Flutter (ويب، ويندوز، أندرويد، آيفون)</span></div><div class="tree-children"><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 lib/</span><span class="badge badge-primary">الشيفرة المصدرية Dart</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 main.dart</span><span class="tag-active">نقطة البداية: الثيم، والتوجيه بين الدخول وتغيير كلمة المرور والصيانة والتطبيق</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 core/</span><span class="badge badge-primary">النواة المركزية</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 api_client.dart</span><span class="tag-active">عميل الاتصال: مهلة الطلبات، ومعالجة 401/503/كلمة مؤقتة، وروابط التنزيل المؤقتة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 auth_provider.dart</span><span class="tag-active">حالة الجلسة والصلاحيات وهوية المؤسسة، وتحديث الصلاحيات كل 5 دقائق</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 constants.dart</span><span class="tag-active">رقم الإصدار، وتسميات الحالات وألوانها</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 theme.dart</span><span class="tag-active">الثيم الموحد وألوان الحالات</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 features/</span><span class="badge badge-primary">الشاشات حسب الميزة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 attendance/</span><span class="badge badge-primary">كشف الحضور</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 attendance_screen.dart</span><span class="tag-active">الكشف اليومي، والمعاينة متعددة الأيام، والاعتماد، وإعادة الاحتساب، والتصدير</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 upload_dialog.dart</span><span class="tag-active">نافذة رفع ملف البصمة: معاينة فقط أو اعتماد مباشر لكل الأيام</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 audit_logs/</span><span class="badge badge-primary">سجل الحركات</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 audit_logs_screen.dart</span><span class="tag-active">استعراض وفلترة الحركات بتوقيت بغداد</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 auth/</span><span class="badge badge-primary">المصادقة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 login_screen.dart</span><span class="tag-active">الدخول، وتذكر البيانات، وضبط عنوان الخادم</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 change_password_screen.dart</span><span class="tag-active">تغيير كلمة المرور المؤقتة الإلزامي</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 maintenance_screen.dart</span><span class="tag-active">شاشة وضع الصيانة لغير الأدمن</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 profile_dialog.dart</span><span class="tag-active">الملف الشخصي: الاسم والصورة وكلمة المرور</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 chat/</span><span class="badge badge-primary">المحادثة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 chat_screen.dart</span><span class="tag-active">المحادثات والمجموعات، وتحميل الرسائل الأقدم، والرقابة للأدمن</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 dashboard/</span><span class="badge badge-primary">لوحة المؤشرات</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 dashboard_screen.dart</span><span class="tag-active">5 بطاقات مؤشرات، وعدد الموظفين المشمولين، وتنبيه اليوم غير المعتمد</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 employees/</span><span class="badge badge-primary">الموظفون</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 employees_screen.dart</span><span class="tag-active">السجل الملوّن، والملف الشخصي، والنقل، والمحذوفين والاستعادة، وملخص الاستيراد</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 employee_dialog.dart</span><span class="tag-active">نافذة إضافة وتعديل موظف</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 leaves/</span><span class="badge badge-primary">الإجازات والعطل</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 leaves_screen.dart</span><span class="tag-active">الإجازات (والإذن الساعي بوقت من/إلى)، والأرشيف، والعطل الرسمية</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 reports/</span><span class="badge badge-primary">التقارير</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 reports_screen.dart</span><span class="tag-active">التقرير الشهري للأيام المعتمدة وتصديره</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 schedules/</span><span class="badge badge-primary">جداول الدوام</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 schedules_screen.dart</span><span class="tag-active">تعيينات الأسبوع، والتنقل بين الأسابيع، ونسخ الأسبوع السابق</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 widgets/</span><span class="badge badge-primary">نوافذ الشاشة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 assign_schedule_dialog.dart</span><span class="tag-active">نافذة تعيين جدول بقالب أو أيام مخصصة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 template_dialogs.dart</span><span class="tag-active">إنشاء وتعديل وحذف القوالب، وأسماء أيام الأسبوع</span></div></div></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 settings/</span><span class="badge badge-primary">الإعدادات (7 تبويبات)</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 settings_screen.dart</span><span class="tag-active">قواعد الدوام، والهوية، والألوان، والأقسام، والمستخدمون، والنسخ، والصيانة</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 widgets/</span><span class="badge badge-primary">نوافذ وعناصر الشاشة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 security_dialogs.dart</span><span class="tag-active">نوافذ التأكيد الأمني بكلمة المرور</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 reset_dialog.dart</span><span class="tag-active">نافذة تصفير النظام بخياريها</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 color_setting_item.dart</span><span class="tag-active">منتقي الألوان ومعاينتها، وتحويل الألوان النصية</span></div></div></div></div></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 shared/</span><span class="badge badge-primary">عناصر مشتركة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 main_layout.dart</span><span class="tag-active">الإطار العام: القائمة الجانبية، والشريط العلوي، وشريطا التعاميم والصيانة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 kpi_card.dart</span><span class="tag-active">بطاقة المؤشر</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 status_badge.dart</span><span class="tag-active">شارة الحالة الملونة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 custom_button.dart</span><span class="tag-active">زر موحد التصميم</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 tools/</span><span class="badge badge-primary">أدوات</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 date_formatter.dart</span><span class="tag-active">الأشهر العراقية، وتحويل طوابع UTC إلى توقيت بغداد</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 responsive.dart</span><span class="tag-active">نقاط التجاوب (هاتف، لوحي، سطح مكتب)</span></div></div></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 test/</span><span class="badge badge-primary">اختبارات Flutter</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 api_client_test.dart</span><span class="tag-active">معالجة 401/503/كلمة مؤقتة وأخطاء الشبكة وروابط التنزيل</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 date_formatter_test.dart</span><span class="tag-active">الأشهر العراقية وتحويل التوقيت</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 widget_test.dart</span><span class="tag-active">اختبار بناء التطبيق</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 web/</span><span class="badge badge-primary">ملفات الويب (index.html و manifest بالعربية)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 android/ windows/ ios/ macos/ linux/</span><span class="badge badge-primary">منصات البناء</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 analysis_options.yaml</span><span class="tag-active">قواعد flutter_lints كاملة دون إخفاء أي تحذير</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 pubspec.yaml</span><span class="tag-active">المكتبات ورقم الإصدار</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 backend/</span><span class="badge badge-primary">الخادم (Node.js + Express 5 + SQLite)</span></div><div class="tree-children"><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 src/</span><span class="badge badge-primary">الشيفرة المصدرية</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 app.js</span><span class="tag-active">التجميع: helmet و CORS وتحديد عنوان العميل والمسارات واستضافة الويب ومعالج الأخطاء والنسخ التلقائي</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 core/</span><span class="badge badge-primary">النواة</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 config.js</span><span class="tag-active">المنفذ والمضيف والمسارات والمفاتيح (من backend/.keys) ومتغيرات البيئة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 database.js</span><span class="tag-active">الجداول والترحيلات المرقّمة والبذر الافتراضي</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 authMiddleware.js</span><span class="tag-active">المصادقة و token_version وتذاكر التنزيل والصلاحيات والصيانة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 rateLimiter.js</span><span class="tag-active">الحماية من التخمين وتحديد العنوان الحقيقي خلف Cloudflare</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 backupScheduler.js</span><span class="tag-active">النسخ التلقائي اليومي والدالة المشتركة لإنشاء النسخ</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 cryptoHelper.js</span><span class="tag-active">تشفير AES-256-GCM لنسخة كلمة المرور القابلة للكشف</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 auditLogger.js</span><span class="tag-active">تسجيل الحركات</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 features/</span><span class="badge badge-primary">الوحدات</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 attendance/</span><span class="badge badge-primary">الحضور</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 attendanceEngine.js</span><span class="tag-active">محرك الاحتساب: الأولويات، والإذن الساعي، ولقطة القواعد، وإعادة الاحتساب</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 attendanceController.js</span><span class="tag-active">المعاينة المحفوظة، والاعتماد بالمعرّف، والكشف اليومي، وإعادة الاحتساب</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 attendanceRoutes.js</span><span class="tag-active">مسارات /api/attendance</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 auth/</span><span class="badge badge-primary">المصادقة (authController, authRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 employees/</span><span class="badge badge-primary">الموظفون (employeeController, employeeRoutes, employeeService للنقل والاستيراد)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 leaves/</span><span class="badge badge-primary">الإجازات والعطل (leaveController, leaveRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 schedules/</span><span class="badge badge-primary">جداول الدوام (scheduleController, scheduleRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 reports/</span><span class="badge badge-primary">التقارير والتصدير (reportController, reportRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 downloads/</span><span class="badge badge-primary">تذاكر التنزيل المؤقتة (downloadRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 settings/</span><span class="badge badge-primary">الإعدادات والمستخدمون والتصفير (settingController, settingRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 backup/</span><span class="badge badge-primary">النسخ والاستعادة (backupController, backupRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 chat/</span><span class="badge badge-primary">المحادثة (chatController, chatRoutes)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 audit_logs/</span><span class="badge badge-primary">سجل الحركات (auditController, auditRoutes)</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 shared/</span><span class="badge badge-primary">مشترك</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 constants.js</span><span class="tag-active">الأدوار والحالات وأنواع الإجازات والألوان</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 responseHelper.js</span><span class="tag-active">قوالب الرد الموحدة و httpError</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 validators.js</span><span class="tag-active">التحقق من المدخلات وسياسة كلمات المرور</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 tools/</span><span class="badge badge-primary">أدوات</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 excelHelper.js</span><span class="tag-active">تحليل ملف الموظفين وملف البصمة (تقسيم حسب اليوم)</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 timeUtils.js</span><span class="tag-active">توقيت بغداد وحساب الأيام وحدود اليوم بتوقيت UTC</span></div></div></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 scripts/</span><span class="badge badge-primary">سكربتات</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 run-forever.js</span><span class="tag-active">مشرف يعيد تشغيل الخادم عند التعطل مع سجل دوّار</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 seed_employees.js</span><span class="tag-active">بذر الموظفين من ملف اساس</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 test_engine.js</span><span class="tag-active">عرض توضيحي للمحرك على الملف النموذجي</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 test/</span><span class="badge badge-primary">الاختبارات الآلية (node:test، 37 اختباراً على قواعد مؤقتة)</span></div><div class="tree-children collapsed"><div class="tree-node"><div class="tree-item file"><span>📄 helpers.js</span><span class="tag-active">تهيئة قاعدة ومفاتيح مؤقتة ودوال مساعدة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 attendance.test.js</span><span class="tag-active">المحرك والمعاينة والاعتماد والتقارير التاريخية</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 security.test.js</span><span class="tag-active">الجلسات والصلاحيات وكلمات المرور والترويسات والتذاكر</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 chat_backup.test.js</span><span class="tag-active">المحادثة والنسخ الاحتياطي والتوقيت</span></div></div></div></div><div class="tree-node"><div class="tree-item file"><span>📄 vendor/xlsx-0.20.3.tgz</span><span class="tag-active">مكتبة SheetJS الرسمية المحدّثة</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 data/</span><span class="badge badge-primary">القاعدة والنسخ والملفات المؤقتة (غير مرفوع إلى git)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 .keys/</span><span class="badge badge-primary">مفاتيح الجلسات والتشفير (غير مرفوع، احتفظ بنسخة آمنة)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 logs/</span><span class="badge badge-primary">سجل الخادم عند التشغيل عبر المشرف (غير مرفوع)</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 uploads/</span><span class="badge badge-primary">الصور الشخصية والشعار</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 package.json</span><span class="tag-active">المكتبات والأوامر: start و start:supervised و test و seed</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 toolkit/</span><span class="badge badge-primary">أدوات التشغيل والنشر</span></div><div class="tree-children"><div class="tree-node"><div class="tree-item file"><span>📄 run-local.bat</span><span class="tag-active">تشغيل في نافذة ظاهرة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 install-startup-service.bat</span><span class="tag-active">التشغيل التلقائي مع الويندوز عبر المشرف</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 run-silent.vbs</span><span class="tag-active">تشغيل المشرف في الخلفية دون نافذة</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 stop-server.bat</span><span class="tag-active">إيقاف المشرف ثم الخادم</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 setup-cloudflare-tunnel.ps1</span><span class="tag-active">إعداد نفق Cloudflare للدومين</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 generate_file_tree.py</span><span class="tag-active">مولّد هذه الخريطة (Markdown و HTML)</span></div></div></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 خطط/</span><span class="badge badge-primary">التوثيق: المرجع الشامل، ودليل التثبيت، والتقرير، والخطط، وسجل الإنجاز</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 اساس/</span><span class="badge badge-primary">ملف الموظفين الأساسي، ونموذج كشف البصمة، وهذه الخريطة</span></div></div><div class="tree-node"><div class="tree-item folder" onclick="toggleNode(this)"><span>📁 releases/</span><span class="badge badge-primary">الإصدارات المبنية (غير مرفوع إلى git)</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 تشغيل النظام.bat</span><span class="tag-active">تشغيل الخادم في نافذة ظاهرة وفتح المتصفح</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 إيقاف النظام.bat</span><span class="tag-active">إيقاف المشرف ثم أي خادم على المنفذ 5000</span></div></div><div class="tree-node"><div class="tree-item file"><span>📄 README.md · CHANGELOG.md · PROJECT_RULES.md</span><span class="tag-active">النبذة، وسجل الإصدارات، وقواعد المشروع</span></div></div></div></div></div>
+  </div>
+</section>
+<section id="frontendTab" class="tab-pane">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">📱 الواجهة الأمامية (Flutter)</h2><p class="section-subtitle">كل شاشة، بماذا ترتبط، ولماذا صممت هكذا.</p></div>
+      
+    </div>
+    <div class="cards-grid">
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>كشف الحضور اليومي</span></div><span class="code-badge">attendance_screen.dart</span></div>
+  <p class="card-desc">الشاشة التشغيلية اليومية: الكشف المعتمد لأي تاريخ، والمعاينة قبل الاعتماد مع اختيار اليوم عند تعدد الأيام في الملف، وإعادة الاحتساب، والتصدير.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route post">POST /api/attendance/preview</span><span class="badge-route post">POST /api/attendance/commit</span><span class="badge-route get">GET /api/attendance/daily</span><span class="badge-route post">POST /api/attendance/recalculate</span><span class="badge-route post">POST /api/downloads/ticket</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>attendance_previews, attendance_days, attendance_records</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> فصل التحليل عن الحفظ، وحفظ المعاينة في الخادم حتى لا يمكن اعتماد بيانات معدّلة من المتصفح.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>سجل الموظفين</span></div><span class="code-badge">employees_screen.dart</span></div>
+  <p class="card-desc">السجل الملوّن حسب الحالة، والملف الشخصي (إجازات وتنقلات وحضور)، والنقل بين الأقسام، والاستيراد مع ملخص، وإظهار المحذوفين واستعادتهم.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route get">GET /api/employees</span><span class="badge-route post">POST /api/employees/:id/transfer</span><span class="badge-route del">DELETE /api/employees/:id</span><span class="badge-route post">POST /api/employees/:id/restore</span><span class="badge-route post">POST /api/employees/import-excel</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>employees, employee_transfers, departments</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> الحذف أرشفة حتى يبقى تاريخ الموظف في التقارير.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>الإجازات والعطل</span></div><span class="code-badge">leaves_screen.dart</span></div>
+  <p class="card-desc">تسجيل الإجازات، ومنها الإذن الساعي بوقت من/إلى، وأرشيف المنتهية، والعطل الرسمية.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route get">GET /api/leaves</span><span class="badge-route post">POST /api/leaves</span><span class="badge-route del">DELETE /api/leaves/:id</span><span class="badge-route post">POST /api/leaves/holidays</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>leaves, official_holidays</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> كل تغيير يعيد احتساب الأيام المعتمدة المتأثرة عبر المحرك نفسه.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>جداول الدوام</span></div><span class="code-badge">schedules_screen.dart + widgets/</span></div>
+  <p class="card-desc">تعيين جداول أسبوعية أو ثابتة بقالب أو أيام مخصصة، ونسخ الأسبوع السابق، وإدارة القوالب.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route get">GET /api/schedules/assignments</span><span class="badge-route post">POST /api/schedules/assign</span><span class="badge-route post">POST /api/schedules/copy-previous-week</span><span class="badge-route post">POST /api/schedules/templates</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>employee_schedules, schedule_templates</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> التعيين يحفظ نسخة من الأيام، فتعديل القالب لاحقاً لا يغيّر التاريخ.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>الإعدادات والصيانة</span></div><span class="code-badge">settings_screen.dart + widgets/</span></div>
+  <p class="card-desc">7 تبويبات: قواعد الدوام وعتبة البصمة المنفردة، والهوية والشعار، والألوان، واستثناء الأقسام، والمستخدمون وكشف كلمة المرور، والنسخ الاحتياطي، والصيانة والتصفير والسنة النشطة.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route put">PUT /api/settings</span><span class="badge-route post">POST /api/settings/users</span><span class="badge-route post">POST /api/settings/users/:id/reveal-password</span><span class="badge-route post">POST /api/backup/create</span><span class="badge-route post">POST /api/settings/reset-db</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>system_settings, users</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> كل العمليات الحساسة تتطلب كلمة مرور يتحقق منها الخادم، وتُسجَّل في سجل الحركات.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>المحادثة</span></div><span class="code-badge">chat_screen.dart</span></div>
+  <p class="card-desc">محادثات ثنائية ومجموعات، وأحدث 150 رسالة مع تحميل الأقدم، والرقابة للأدمن.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route get">GET /api/chat/conversations</span><span class="badge-route get">GET /api/chat/messages</span><span class="badge-route post">POST /api/chat/messages</span><span class="badge-route post">POST /api/chat/groups</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>chat_channels, chat_members, chat_messages</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> منع تكرار الرسائل بين الإرسال والاستطلاع الدوري، وإرجاع النص عند فشل الإرسال.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>الدخول والجلسة</span></div><span class="code-badge">login_screen.dart + change_password_screen.dart</span></div>
+  <p class="card-desc">الدخول، وضبط عنوان الخادم، وتغيير كلمة المرور المؤقتة الإلزامي قبل أي شاشة أخرى.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route post">POST /api/auth/login</span><span class="badge-route put">PUT /api/auth/profile</span><span class="badge-route get">GET /api/auth/me</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>users</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> تغيير كلمة المرور يُبطل الجلسات القديمة ويُرجع رمزاً جديداً للجلسة الحالية.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>عميل الاتصال</span></div><span class="code-badge">api_client.dart</span></div>
+  <p class="card-desc">كل الطلبات بمهلة، ومعالجة مركزية: 401 خروج، و503 شاشة صيانة، و403 كلمة مؤقتة. ويطلب روابط التنزيل بتذكرة.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route post">POST /api/downloads/ticket</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>—</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> نقطة واحدة لمعالجة الأخطاء بدل تكرارها في كل شاشة.</div>
+</div>
+</div>
+  </div>
+</section>
+<section id="backendTab" class="tab-pane">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">⚙️ الخادم والمحرك</h2><p class="section-subtitle">الوحدات الأساسية في backend/src.</p></div>
+      
+    </div>
+    <div class="cards-grid">
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>محرك الحضور</span></div><span class="code-badge">attendanceEngine.js</span></div>
+  <p class="card-desc">يطابق البصمات مع العطل وجداول الدوام والإجازات ويحسب الحالة والدقائق، ويحفظ لقطة القواعد مع كل يوم معتمد.</p>
+  <div class="card-links">
+    
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>attendance_records, attendance_days, leaves, official_holidays, employee_schedules</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> إعادة الاحتساب بنفس قواعد اليوم تحافظ على ثبات التاريخ.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>قاعدة البيانات</span></div><span class="code-badge">database.js</span></div>
+  <p class="card-desc">better-sqlite3 بوضع WAL، وجداول النظام، وترحيلات مرقّمة تُطبَّق تلقائياً عند الإقلاع وبعد الاستعادة.</p>
+  <div class="card-links">
+    
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>كل الجداول + schema_migrations</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> ترقية آمنة لأي نسخة قديمة دون فقدان بيانات.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>وسيط المصادقة</span></div><span class="code-badge">authMiddleware.js</span></div>
+  <p class="card-desc">يتحقق من الرمز و token_version وحالة الحساب، ويفرض تغيير الكلمة المؤقتة ووضع الصيانة، ويصادق روابط التنزيل بالتذاكر.</p>
+  <div class="card-links">
+    
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>users, system_settings</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> رموز أخطاء موحدة تمكّن الواجهة من التصرف الصحيح.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>الحماية من التخمين</span></div><span class="code-badge">rateLimiter.js</span></div>
+  <p class="card-desc">عدّاد لكل عنوان وآخر لكل حساب، ويعتمد CF-Connecting-IP من loopback فقط.</p>
+  <div class="card-links">
+    
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>—</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> منع تجاوز الحد بتزوير الترويسات، خصوصاً خلف Cloudflare.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>النسخ الاحتياطي</span></div><span class="code-badge">backupScheduler.js + backupController.js</span></div>
+  <p class="card-desc">نسخ يومي تلقائي (آخر 30)، ونسخ يدوي، واستعادة مع فحص الجداول والسلامة وتطبيق الترحيلات.</p>
+  <div class="card-links">
+    <div class="card-links-row"><span class="card-links-label">المسارات:</span><span class="badge-route get">GET /api/backup</span><span class="badge-route post">POST /api/backup/create</span><span class="badge-route post">POST /api/backup/restore</span></div>
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>كل القاعدة</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> التصفير يُلغى إذا فشلت نسخة الأمان.</div>
+</div>
+<div class="feature-card">
+  <div class="card-top"><div class="card-title"><span>التشفير</span></div><span class="code-badge">cryptoHelper.js</span></div>
+  <p class="card-desc">AES-256-GCM لنسخة كلمة المرور القابلة للكشف، والمفتاح في backend/.keys خارج مجلد البيانات.</p>
+  <div class="card-links">
+    
+    <div class="card-links-row"><span class="card-links-label">الجداول:</span><span>users.encrypted_password</span></div>
+  </div>
+  <div class="card-why"><strong>لماذا صممت هكذا؟</strong> النسخ الاحتياطية لا تحتوي المفتاح.</div>
+</div>
+</div>
+  </div>
+</section>
+<section id="matrixTab" class="tab-pane">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">🔗 مصفوفة الارتباط</h2><p class="section-subtitle">من الشاشة إلى المسار إلى المنطق إلى الجداول.</p></div>
+      
+    </div>
+    <div class="table-responsive"><table id="matrixTable"><thead><tr><th>الإجراء</th><th>الشاشة</th><th>المسار</th><th>المنطق</th><th>الجداول</th></tr></thead><tbody><tr><td>معاينة ملف البصمة</td><td>attendance_screen / upload_dialog</td><td>POST /api/attendance/preview</td><td>attendanceController.previewAttendance</td><td>attendance_previews</td></tr><tr><td>اعتماد يوم</td><td>attendance_screen</td><td>POST /api/attendance/commit</td><td>attendanceController.commitAttendance</td><td>attendance_days, attendance_records</td></tr><tr><td>إعادة احتساب يوم</td><td>attendance_screen</td><td>POST /api/attendance/recalculate</td><td>attendanceEngine.recalculateCommittedDayIfExists</td><td>attendance_days, attendance_records</td></tr><tr><td>تصدير الكشف اليومي</td><td>attendance_screen</td><td>POST /api/downloads/ticket ← GET /api/reports/export-daily</td><td>reportController.exportDailyExcel</td><td>attendance_records</td></tr><tr><td>تسجيل إجازة</td><td>leaves_screen</td><td>POST /api/leaves</td><td>leaveController.createLeave</td><td>leaves (+ إعادة احتساب الأيام المعتمدة)</td></tr><tr><td>تعيين جدول دوام</td><td>assign_schedule_dialog</td><td>POST /api/schedules/assign</td><td>scheduleController.assignSchedule</td><td>employee_schedules (+ إعادة احتساب)</td></tr><tr><td>حذف موظف</td><td>employees_screen</td><td>DELETE /api/employees/:id</td><td>employeeController.deleteEmployee</td><td>employees.deleted_at</td></tr><tr><td>نقل موظف</td><td>employees_screen</td><td>POST /api/employees/:id/transfer</td><td>employeeService.transferInTx</td><td>employees, employee_transfers</td></tr><tr><td>استيراد الموظفين</td><td>employees_screen</td><td>POST /api/employees/import-excel</td><td>employeeService.importEmployees</td><td>employees, departments, employee_transfers</td></tr><tr><td>التقرير الشهري</td><td>reports_screen</td><td>GET /api/reports/monthly</td><td>reportController.getMonthlyTimesheet</td><td>attendance_records</td></tr><tr><td>تغيير كلمة المرور</td><td>change_password_screen / profile_dialog</td><td>PUT /api/auth/profile</td><td>authController.updateProfile</td><td>users (token_version)</td></tr><tr><td>كشف كلمة مرور مستخدم</td><td>settings_screen</td><td>POST /api/settings/users/:id/reveal-password</td><td>settingController.revealPassword</td><td>users, audit_logs</td></tr><tr><td>حفظ الإعدادات</td><td>settings_screen</td><td>PUT /api/settings</td><td>settingController.updateSettings</td><td>system_settings</td></tr><tr><td>التصفير</td><td>settings_screen / reset_dialog</td><td>POST /api/settings/reset-db</td><td>settingController.resetDatabase</td><td>كل الجداول (بعد نسخة أمان)</td></tr><tr><td>إرسال رسالة</td><td>chat_screen</td><td>POST /api/chat/messages</td><td>chatController.sendMessage</td><td>chat_messages</td></tr></tbody></table></div>
+  </div>
+</section>
+<section id="identifiersTab" class="tab-pane">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">📖 قاموس المعرفات</h2><p class="section-subtitle">المعرفات والقيم الحاكمة في الكود وقاعدة البيانات.</p></div>
+      
+    </div>
+    <div class="table-responsive"><table><thead><tr><th>المعرف</th><th>المعنى</th></tr></thead><tbody><tr><td>SUPER_ADMIN / DATA_ENTRY</td><td>الرتبتان الوحيدتان في النظام</td></tr><tr><td>can_manage_exclusions / can_recommit</td><td>صلاحيتان اختياريتان لمدخل البيانات: استثناء الأقسام، وإعادة الاعتماد</td></tr><tr><td>ON_TIME · LATE · VERY_LATE · EARLY_LEAVE</td><td>حالات الحضور (التأخير البسيط حتى 30 دقيقة)</td></tr><tr><td>ABSENT · ON_LEAVE · HOLIDAY · OFF_DAY · MISSED_PUNCH</td><td>غياب، إجازة يوم كامل، عطلة، راحة أسبوعية، بصمة ناقصة</td></tr><tr><td>زمنية (ساعية)</td><td>نوع الإذن الساعي، يحتاج start_time و end_time</td></tr><tr><td>rules_json</td><td>لقطة قواعد الدوام المحفوظة مع كل يوم معتمد</td></tr><tr><td>department_snapshot</td><td>قسم الموظف لحظة الاعتماد، وتعتمد عليه التقارير</td></tr><tr><td>deleted_at</td><td>الحذف الناعم للموظفين والمستخدمين</td></tr><tr><td>token_version</td><td>يزداد عند تغيير كلمة المرور أو الرتبة أو التعطيل، فيُبطل كل الرموز السابقة</td></tr><tr><td>must_change_password</td><td>كلمة مرور مؤقتة يجب تغييرها قبل أي عملية</td></tr><tr><td>previewId</td><td>معرّف المعاينة المحفوظة في الخادم (صلاحية 24 ساعة)</td></tr><tr><td>single_punch_exit_threshold</td><td>البصمة الوحيدة بعد هذا الوقت تُعامل كخروج (الافتراضي 12:30)</td></tr><tr><td>bonus_mode = default | custom</td><td>المكافأة الافتراضية: قبل البداية بساعة وبعد النهاية</td></tr><tr><td>factory_default / wipe_all</td><td>وضعا التصفير</td></tr><tr><td>SESSION_EXPIRED · ACCOUNT_DISABLED · PASSWORD_CHANGE_REQUIRED · MAINTENANCE</td><td>رموز أخطاء الجلسة التي تتعامل معها الواجهة</td></tr><tr><td>export-daily · export-monthly · backup</td><td>أنواع تذاكر التنزيل المؤقتة (60 ثانية)</td></tr></tbody></table></div>
+  </div>
+</section>
+<section id="scriptsTab" class="tab-pane">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">🚀 السكربتات والأوامر</h2><p class="section-subtitle">ملفات التشغيل وأوامر الاختبار والبناء.</p></div>
+      
+    </div>
+    <div class="table-responsive"><table><thead><tr><th>الأمر أو الملف</th><th>الوظيفة</th></tr></thead><tbody><tr><td>تشغيل النظام.bat</td><td>يبذر الموظفين إن كانت القاعدة فارغة (ما لم تُصفَّر عمداً)، ثم يشغّل الخادم في نافذة ظاهرة ويفتح المتصفح</td></tr><tr><td>إيقاف النظام.bat</td><td>يوقف المشرف في الخلفية أولاً، ثم أي خادم على المنفذ 5000</td></tr><tr><td>toolkit/install-startup-service.bat</td><td>تشغيل الخادم تلقائياً مع الويندوز عبر المشرف (مرة واحدة)</td></tr><tr><td>toolkit/setup-cloudflare-tunnel.ps1</td><td>إعداد النفق وربط Employee.nociraq.com</td></tr><tr><td>cd backend &amp;&amp; npm test</td><td>37 اختباراً آلياً على قواعد مؤقتة معزولة</td></tr><tr><td>cd backend &amp;&amp; npm run start:supervised</td><td>تشغيل الخادم عبر المشرف (إعادة تشغيل تلقائية وسجل)</td></tr><tr><td>cd app &amp;&amp; flutter analyze &amp;&amp; flutter test</td><td>تحليل الكود واختبارات الواجهة</td></tr><tr><td>cd app &amp;&amp; flutter build web --release</td><td>بناء نسخة الويب التي يستضيفها الخادم</td></tr><tr><td>cd app &amp;&amp; flutter build windows --release</td><td>بناء تطبيق ويندوز</td></tr><tr><td>python toolkit/generate_file_tree.py</td><td>إعادة توليد هذه الخريطة بعد أي تغيير في البنية</td></tr></tbody></table></div>
+  </div>
+</section>
+<section id="auditTab" class="tab-pane">
+  <div class="section-card">
+    <div class="section-header">
+      <div><h2 class="section-title">⚖️ الجرد</h2><p class="section-subtitle">المستخدم حالياً مقابل المجهز للمستقبل.</p></div>
+      
+    </div>
+    <div class="table-responsive"><table><thead><tr><th>العنصر</th><th>الحالة</th><th>ملاحظة</th></tr></thead><tbody><tr><td>app/lib/**</td><td><span class="tag-active">مستخدم</span></td><td>كل الشاشات تعمل على الويب وتطبيق ويندوز</td></tr><tr><td>backend/src/**</td><td><span class="tag-active">مستخدم</span></td><td>كل المسارات والمحرك والحماية</td></tr><tr><td>backend/test/** و app/test/**</td><td><span class="tag-active">مستخدم</span></td><td>تُشغَّل قبل أي بناء أو نشر</td></tr><tr><td>backend/scripts/run-forever.js</td><td><span class="tag-active">مستخدم</span></td><td>عند التشغيل التلقائي مع الويندوز</td></tr><tr><td>backend/scripts/test_engine.js</td><td><span class="tag-active">مستخدم</span></td><td>عرض توضيحي فقط، وليس اختباراً</td></tr><tr><td>app/android/</td><td><span class="tag-future">للمستقبل</span></td><td>جاهز للبناء؛ النشر على Google Play يحتاج مفتاح توقيع رسمياً</td></tr><tr><td>app/ios/ و app/macos/</td><td><span class="tag-future">للمستقبل</span></td><td>يُبنى على جهاز ماك</td></tr><tr><td>app/linux/</td><td><span class="tag-future">للمستقبل</span></td><td>غير مستخدم حالياً</td></tr></tbody></table></div>
+  </div>
+</section>
     </main>
   </div>
 
-  <!-- Detail Modal -->
-  <div class="modal-backdrop" id="detailModal">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 id="modalTitle" style="font-size: 1.25rem; font-weight: 800;">تفاصيل العنصر</h3>
-        <button class="modal-close" onclick="closeModal()">&times;</button>
-      </div>
-      <div id="modalBody" style="font-size: 0.95rem; line-height: 1.7; color: var(--text-muted);">
-        <!-- Injected by JS -->
-      </div>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <footer>
-    <p>الموسوعة الهيكلية والمعمارية الحية • نظام كشف حضور وانصراف موظفي مقر اللجنة الأولمبية الوطنية العراقية</p>
-    <p style="margin-top: 0.35rem; color: var(--text-dim);">تم التوليد والتزامن البرمجي مع ملف <code>File_Tree_Employee_NOCI.md</code> • مستودع GitHub الفرع <code>main</code></p>
-  </footer>
-
-  <!-- Scripts -->
   <script>
-    // Tab Switching
     function switchTab(tabId, btn) {
       document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.nav-item button').forEach(el => el.classList.remove('active'));
       const target = document.getElementById(tabId);
-      if (target) {
-        target.classList.add('active');
-        btn.classList.add('active');
-      }
+      if (target) { target.classList.add('active'); btn.classList.add('active'); }
     }
-
-    // Tree Node Toggle
     function toggleNode(element) {
-      const parent = element.parentElement;
-      const children = parent.querySelector('.tree-children');
-      if (children) {
-        children.classList.toggle('collapsed');
-      }
+      const children = element.parentElement.querySelector('.tree-children');
+      if (children) children.classList.toggle('collapsed');
     }
-
-    function expandAllTree() {
-      document.querySelectorAll('.tree-children').forEach(el => el.classList.remove('collapsed'));
-    }
-
-    function collapseAllTree() {
-      document.querySelectorAll('.tree-children').forEach(el => el.classList.add('collapsed'));
-    }
-
-    // Modal Details
-    const fileDetails = {
-      'api_client': {
-        title: 'عميل الاتصال المركزي (api_client.dart)',
-        desc: 'يقوم بتغليف طلبات HTTP ويحقن ترويسة المصادقة Authorization Bearer Token تلقائياً، ويعترض أخطاء انقطاع الاتصال أو وضع الصيانة 503 لإظهار تنبيهات فورية للمستخدم.'
-      },
-      'auth_provider': {
-        title: 'مزود جلسة المستخدم (auth_provider.dart)',
-        desc: 'يدير حالة المستخدم وصلاحياته (سوبر أدمن أو مدخل بيانات) ويحتفظ ببيانات تسجيل الدخول عبر SharedPreferences عند تفعيل خيار تذكر الحساب.'
-      },
-      'attendance_screen': {
-        title: 'شاشة كشف الحضور (attendance_screen.dart)',
-        desc: 'تعرض كشف اليوم، دقائق التأخير باللون الأحمر، الخروج المبكر، الإجازات، وتتيح تعديل الأوقات واعتماد الكشف نهائياً مع حظر إعادة الحفظ إلا بإذن السوبر أدمن.'
-      },
-      'employees_screen': {
-        title: 'سجل الموظفين (employees_screen.dart)',
-        desc: 'السجل العام لموظفي المقر مع التلوين الذكي التلقائي للخلايا (أزرق للإجازة السارية، برتقالي للتنسيب، أحمر للمتوفى أو منتهي الخدمة، رمادي لـ VIP).'
-      },
-      'engine': {
-        title: 'محرك الذكاء الاصطناعي (attendanceEngine.js)',
-        desc: 'العقل الرياضي؛ يطابق بصمات الإكسل مع جداول الدوام والإجازات ويحسب التأخير بالدقائق بعد خصم فترة السماح، ويضع ملاحظة على من يحضر في يوم الأوف.'
-      },
-      'database': {
-        title: 'قاعدة البيانات المسرعة (database.js)',
-        desc: 'تستخدم better-sqlite3 بنمط WAL؛ تبني الجداول والمؤشرات العشرة تلقائياً وتضمن استجابة فائقة السرعة للأجهزة المتعددة.'
-      },
-      'crypto': {
-        title: 'التشفير العسكري الثنائي (cryptoHelper.js)',
-        desc: 'تشفير AES-256-GCM للبيانات الحساسة والمحادثات مع قيمة IV فريدة، وتشفير كلمات المرور عبر Bcrypt بـ 10 جولات تمليح.'
-      },
-      'run_bat': {
-        title: 'زر التشغيل الرئيسي (تشغيل النظام.bat)',
-        desc: 'يحرر المنفذ 5000 ويشغل السيرفر بالخلفية ويتحقق من حالة ONLINE 200 OK ثم يطلق المتصفح الافتراضي تلقائياً.'
-      },
-      'stop_bat': {
-        title: 'زر الإيقاف الآمن (إيقاف النظام.bat)',
-        desc: 'ينهي العملية المستمعة على المنفذ 5000 فورياً ويحرر الذاكرة بنقرة واحدة.'
-      }
-    };
-
-    function showFileDetail(key) {
-      const data = fileDetails[key];
-      if (!data) return;
-      document.getElementById('modalTitle').innerText = data.title;
-      document.getElementById('modalBody').innerText = data.desc;
-      document.getElementById('detailModal').classList.add('active');
-    }
-
-    function closeModal() {
-      document.getElementById('detailModal').classList.remove('active');
-    }
-
-    // Global Search
-    document.getElementById('globalSearch').addEventListener('input', function(e) {
-      const query = e.target.value.toLowerCase().trim();
-      if (!query) {
-        document.querySelectorAll('.feature-card, #matrixTable tbody tr, .tree-item').forEach(el => el.style.display = '');
-        return;
-      }
-
-      // Filter Cards
-      document.querySelectorAll('.feature-card').forEach(card => {
-        const text = card.innerText.toLowerCase();
-        card.style.display = text.includes(query) ? '' : 'none';
-      });
-
-      // Filter Matrix Rows
-      document.querySelectorAll('#matrixTable tbody tr').forEach(row => {
-        const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(query) ? '' : 'none';
-      });
-
-      // Filter Tree Items
-      document.querySelectorAll('.tree-item').forEach(item => {
-        const text = item.innerText.toLowerCase();
-        item.style.display = text.includes(query) ? '' : 'none';
-      });
-    });
-
-    // Close modal on click outside
-    document.getElementById('detailModal').addEventListener('click', function(e) {
-      if (e.target === this) closeModal();
+    function expandAllTree() { document.querySelectorAll('.tree-children').forEach(el => el.classList.remove('collapsed')); }
+    function collapseAllTree() { document.querySelectorAll('.tree-children').forEach(el => el.classList.add('collapsed')); }
+    document.getElementById('globalSearch').addEventListener('input', function (e) {
+      const q = e.target.value.toLowerCase().trim();
+      const items = document.querySelectorAll('.feature-card, tbody tr, .tree-item');
+      if (q) expandAllTree();
+      items.forEach(el => { el.style.display = !q || el.innerText.toLowerCase().includes(q) ? '' : 'none'; });
     });
   </script>
 </body>

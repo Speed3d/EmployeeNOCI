@@ -1,17 +1,25 @@
-# noci_attendance
+# NOCI Attendance — تطبيق Flutter
 
-A new Flutter project.
+واجهة نظام متابعة حضور وانصراف موظفي المقر (ويب، ويندوز، أندرويد، آيفون). الإصدار 2.0.0.
 
-## Getting Started
+## التشغيل للتطوير
+```bash
+flutter pub get
+flutter run -d chrome
+```
+يتصل التطبيق افتراضياً بالخادم على `http://localhost:5000/api`. يمكن تغيير العنوان من شاشة الدخول عبر **"ضبط عنوان الخادم (API)"**.
 
-This project is a starting point for a Flutter application.
+## الجودة
+```bash
+flutter analyze
+flutter test
+```
+التحليل يعمل بالقواعد الموصى بها كاملة (`flutter_lints`) دون إخفاء أي تحذير.
 
-A few resources to get you started if this is your first Flutter project:
+## البنية
+- `lib/core/`: عميل الاتصال (مهلة ومعالجة انتهاء الجلسة والصيانة)، ومزود المصادقة، والثيم، والثوابت.
+- `lib/features/`: الشاشات. الشاشات الكبيرة مقسمة إلى ملفات في `widgets/` داخل مجلد الميزة.
+- `lib/tools/`: تنسيق التواريخ (أشهر عراقية، وتحويل UTC إلى توقيت بغداد)، والتجاوب.
+- `test/`: اختبارات عميل الاتصال وتنسيق التواريخ.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+التوثيق الكامل: [المرجع الشامل](../خطط/المرجع_الشامل_والدليل_التشغيلي_المعتمد.md).
