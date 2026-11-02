@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>المساعد التنفيذي لنشر نظام الحضور NOCI — الدليل التفاعلي</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-main: 'Cairo', 'Tajawal', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --bg-base: #0B0F19;
+      --bg-surface: #111827;
+      --bg-surface-2: #1F2937;
+      --bg-surface-3: #374151;
+      --border-subtle: #1F2937;
+      --border-strong: #374151;
+      
+      --text-main: #F9FAFB;
+      --text-muted: #9CA3AF;
+      --text-soft: #6B7280;
+      
+      --cyan-primary: #06B6D4;
+      --cyan-hover: #0891B2;
+      --cyan-light: rgba(6, 182, 212, 0.12);
+      
+      --accent-danger: #EF4444;
+      --accent-danger-bg: rgba(239, 68, 68, 0.15);
+      --accent-warning: #F59E0B;
+      --accent-warning-bg: rgba(245, 158, 11, 0.15);
+      --accent-success: #10B981;
+      --accent-success-bg: rgba(16, 185, 129, 0.15);
+      
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+    }
+
+    html.light {
+      --bg-base: #F8FAFC;
+      --bg-surface: #FFFFFF;
+      --bg-surface-2: #F1F5F9;
+      --bg-surface-3: #E2E8F0;
+      --border-subtle: #E2E8F0;
+      --border-strong: #CBD5E1;
+      
+      --text-main: #0F172A;
+      --text-muted: #475569;
+      --text-soft: #64748B;
+      
+      --cyan-primary: #0891B2;
+      --cyan-hover: #0E7490;
+      --cyan-light: rgba(8, 145, 178, 0.12);
+      
+      --accent-danger: #DC2626;
+      --accent-danger-bg: #FEF2F2;
+      --accent-warning: #D97706;
+      --accent-warning-bg: #FFFBEB;
+      --accent-success: #059669;
+      --accent-success-bg: #ECFDF5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; transition: background 0.15s, border-color 0.15s; }
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      line-height: 1.6;
+      font-size: 14.5px;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px 80px 20px; }
+
+    /* Header */
+    .header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--cyan-primary), #3B82F6);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      color: #fff;
+    }
+    .brand-title { font-size: 20px; font-weight: 800; color: var(--text-main); }
+    .brand-desc { font-size: 13px; color: var(--text-muted); }
+
+    /* Configuration Bar */
+    .config-card {
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .config-field { display: flex; flex-direction: column; gap: 6px; }
+    .config-label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+    .config-input {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      direction: ltr;
+      text-align: left;
+      outline: none;
+    }
+    .config-input:focus { border-color: var(--cyan-primary); }
+
+    /* Machine Switcher Tabs */
+    .tabs-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .machine-filters {
+      display: flex;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      gap: 4px;
+    }
+    .filter-btn {
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-main);
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .filter-btn.active {
+      background: var(--cyan-primary);
+      color: #fff;
+    }
+
+    /* Progress & Actions */
+    .progress-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .progress-bar-outer {
+      width: 150px;
+      height: 8px;
+      background: var(--bg-surface-3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar-inner {
+      height: 100%;
+      width: 0%;
+      background: var(--cyan-primary);
+      transition: width 0.3s;
+    }
+
+    /* Phase Cards */
+    .phase-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      margin-bottom: 20px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .phase-card.machine-dev { border-right: 5px solid #3B82F6; }
+    .phase-card.machine-trial { border-right: 5px solid var(--cyan-primary); }
+    .phase-card.machine-reset { border-right: 5px solid var(--accent-warning); }
+    .phase-card.machine-update { border-right: 5px solid var(--accent-success); }
+
+    .phase-header {
+      padding: 18px 24px;
+      background: var(--bg-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .phase-header-info { display: flex; align-items: center; gap: 14px; }
+    .phase-num {
+      width: 38px;
+      height: 38px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      font-size: 15px;
+      color: var(--cyan-primary);
+    }
+    .phase-title-text { font-size: 16px; font-weight: 800; color: var(--text-main); }
+    .phase-sub { font-size: 12.5px; color: var(--text-muted); }
+
+    .phase-badges { display: flex; align-items: center; gap: 8px; }
+    .badge {
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .badge-dev { background: rgba(59, 130, 246, 0.15); color: #60A5FA; }
+    .badge-trial { background: var(--cyan-light); color: var(--cyan-primary); }
+    .badge-reset { background: var(--accent-warning-bg); color: var(--accent-warning); }
+    .badge-update { background: var(--accent-success-bg); color: var(--accent-success); }
+
+    .phase-body {
+      padding: 24px;
+      border-top: 1px solid var(--border-subtle);
+      display: block;
+    }
+    .phase-card.collapsed .phase-body { display: none; }
+
+    /* Script Runner Card */
+    .runner-box {
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .runner-details { display: flex; flex-direction: column; gap: 4px; }
+    .runner-title { font-weight: 800; font-size: 13.5px; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+    .runner-cmd { font-family: var(--font-mono); font-size: 12.5px; color: var(--cyan-primary); direction: ltr; }
+
+    /* Command snippet */
+    .cmd-card {
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      margin: 14px 0;
+      overflow: hidden;
+    }
+    .cmd-header {
+      background: var(--bg-surface-2);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    pre {
+      padding: 14px 18px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.5;
+      overflow-x: auto;
+      color: var(--text-main);
+      direction: ltr;
+      text-align: left;
+    }
+
+    /* Guards & Errors boxes */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .guard-box {
+      background: var(--bg-surface-2);
+      border-right: 4px solid var(--accent-success);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-size: 13px;
+    }
+    .guard-title { font-weight: 800; color: var(--accent-success); margin-bottom: 6px; }
+
+    .error-box {
+      background: var(--bg-surface-2);
+      border-right: 4px solid var(--accent-danger);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-size: 13px;
+    }
+    .error-title { font-weight: 800; color: var(--accent-danger); margin-bottom: 6px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-main);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-surface-3);
+      color: var(--text-main);
+      text-decoration: none;
+    }
+    .btn:hover { background: var(--border-strong); }
+    .btn-primary {
+      background: var(--cyan-primary);
+      border-color: var(--cyan-primary);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--cyan-hover); }
+
+    .btn-copy {
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-strong);
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .btn-copy:hover { border-color: var(--cyan-primary); color: var(--cyan-primary); }
+
+    .chk-done {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    .chk-done input { width: 18px; height: 18px; cursor: pointer; }
+    .chk-done.checked { color: var(--accent-success); }
+  
+    .phase-card.machine-info { border-right: 5px solid #8B5CF6; }
+    .badge-info { background: rgba(139, 92, 246, 0.15); color: #A78BFA; }
+    .note-box {
+      background: var(--bg-surface-2);
+      border-right: 4px solid var(--cyan-primary);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-size: 13px;
+      margin-top: 16px;
+    }
+    .note-title { font-weight: 800; color: var(--cyan-primary); margin-bottom: 6px; }
+    table.info { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    table.info th, table.info td { border: 1px solid var(--border-strong); padding: 8px 10px; text-align: right; vertical-align: top; }
+    table.info th { background: var(--bg-surface-2); font-weight: 800; }
+    table.info td code, .guard-box code, .error-box code, .note-box code, .phase-sub code {
+      font-family: var(--font-mono); font-size: 12px; direction: ltr; unicode-bidi: embed;
+      background: var(--bg-surface-3); padding: 1px 6px; border-radius: 4px;
+    }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; font-weight: 700; font-size: 13px; }
+    .flow span.step { background: var(--bg-surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 12px; }
+    .flow span.arrow { color: var(--text-soft); }
+    .machine-filters { flex-wrap: wrap; }
+    @media (max-width: 640px) {
+      .container { padding: 16px 16px 60px 16px; }
+      .phase-header { flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; }
+      .phase-body { padding: 16px; }
+      .progress-bar-outer { width: 100px; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    @media print {
+      .machine-filters, .btn, .btn-copy, .config-card { display: none !important; }
+      .phase-card.collapsed .phase-body { display: block; }
+      .phase-card { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">
+        <div class="brand-icon">NOCI</div>
+        <div>
+          <div class="brand-title">المساعد التنفيذي لنشر وتثبيت نظام حضور موظفي المقر</div>
+          <div class="brand-desc">الكتالوج التفاعلي للتثبيت والتحديث والتصفير — مبني على تجربة DMS ومكيّف لخادم Node وقاعدة SQLite (الإصدار 2.0.0)</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button id="themeBtn" class="btn" style="padding: 6px 12px;">☀️ / 🌙</button>
+        <button id="resetChecks" class="btn">↺ مسح علامات الإنجاز</button>
+        <button onclick="window.print()" class="btn">🖨️ طباعة الدليل</button>
+      </div>
+    </div>
+
+    <!-- Live Configuration Bar -->
+    <div class="config-card">
+      <div class="config-field">
+        <label class="config-label">اسم الدومين (Domain):</label>
+        <input type="text" id="cfgDomain" class="config-input" value="employee.nociraq.com">
+      </div>
+      <div class="config-field">
+        <label class="config-label">حرف محرك الفلاشة (USB):</label>
+        <input type="text" id="cfgDrive" class="config-input" value="E:\">
+      </div>
+      <div class="config-field">
+        <label class="config-label">مجلد التثبيت على الخادم:</label>
+        <input type="text" id="cfgInstall" class="config-input" value="C:\NOCI">
+      </div>
+      <div class="config-field">
+        <label class="config-label">مجلد المشروع على جهاز التطوير:</label>
+        <input type="text" id="cfgRepo" class="config-input" value="D:\Employee NOCI">
+      </div>
+      <div class="config-field">
+        <label class="config-label">الإصدار:</label>
+        <input type="text" id="cfgVersion" class="config-input" value="2.0.0">
+      </div>
+    </div>
+  </div>
+
+  <!-- Machine Filter Tabs & Progress -->
+  <div class="tabs-bar">
+    <div class="machine-filters">
+      <button class="filter-btn active" data-filter="all">عرض الكل</button>
+      <button class="filter-btn" data-filter="dev">💻 جهاز التطوير (1)</button>
+      <button class="filter-btn" data-filter="trial">🖥️ التثبيت على الخادم (2 - 6)</button>
+      <button class="filter-btn" data-filter="update">🚀 التحديث (7 و 8)</button>
+      <button class="filter-btn" data-filter="reset">🔄 التصفير (0)</button>
+      <button class="filter-btn" data-filter="info">🧭 المرجع والأعطال</button>
+    </div>
+
+    <div class="progress-box">
+      <span>نسبة الإنجاز:</span>
+      <div class="progress-bar-outer">
+        <div id="progBar" class="progress-bar-inner"></div>
+      </div>
+      <span id="progText">0 / 9</span>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="phase-card machine-info" data-machine="info">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">ⓘ</div>
+        <div>
+          <div class="phase-title-text">نظرة عامة: كيف يعمل النشر</div>
+          <div class="phase-sub">خادم واحد على المنفذ <code>5000</code> يقدّم الواجهة والـ API، ونفق Cloudflare يوصله للدومين دون IP ثابت ودون فتح منافذ</div>
+        </div>
+      </div>
+      <div class="phase-badges"><span class="badge badge-info">🧭 مرجع</span></div>
+    </div>
+    <div class="phase-body">
+      <div class="flow">
+        <span class="step">🌐 المتصفح أو الهاتف</span><span class="arrow">←</span>
+        <span class="step">https://<span class="dyn-domain">employee.nociraq.com</span></span><span class="arrow">←</span>
+        <span class="step">Cloudflare</span><span class="arrow">←</span>
+        <span class="step">خدمة Cloudflared على الخادم</span><span class="arrow">←</span>
+        <span class="step">http://localhost:5000</span><span class="arrow">←</span>
+        <span class="step">مهمة NociAttendanceServer (Node + SQLite)</span>
+      </div>
+      <div class="grid-2">
+        <div class="note-box">
+          <div class="note-title">🆚 الفرق عن DMS:</div>
+          لا IIS ولا SQL Server ولا .NET. الخادم Node واحد يقدّم كل شيء، وقاعدة البيانات ملف <code>attendance.db</code>. لذلك النفق يوجّه الدومين كله إلى منفذ واحد، والنسخ الاحتياطي نسخ ملف.
+        </div>
+        <div class="note-box">
+          <div class="note-title">🧩 الترتيب:</div>
+          <strong>أول مرة:</strong> 1 على جهاز التطوير ← 2، 3، 4، 5، 6 على الخادم.<br>
+          <strong>تحديث إصدار:</strong> 1 على جهاز التطوير ← 7 فقط على الخادم.<br>
+          <strong>تنبيه أمني من Cloudflare:</strong> 8 فقط.<br>
+          <strong>القائمة التفاعلية:</strong> <code>NOCI-Deploy\Run_Deploy_Menu.bat</code> تشغّل أي خطوة برقمها.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 0: RESET -->
+  <div class="phase-card machine-reset collapsed" data-machine="reset">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">00</div>
+        <div>
+          <div class="phase-title-text">تصفير حاسبة التجربة بالكامل (Reset to Clean State)</div>
+          <div class="phase-sub">حذف مهمة الخادم وخدمة Cloudflared ومجلد التثبيت لإعادة التجربة من الصفر، مع نسخة أخيرة من البيانات</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-reset">🧪 حاسبة التجربة</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p0"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر التشغيل المؤتمت (يطلب كتابة RESET للتأكيد):</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\00-server-reset.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>أوامر التصفير اليدوية المباشرة (PowerShell كمسؤول)</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code># 1. إيقاف الخادم وحذف مهمته
+Stop-ScheduledTask NociAttendanceServer -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*<span class="dyn-install">C:\NOCI</span>*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Unregister-ScheduledTask NociAttendanceServer -Confirm:$false
+
+# 2. حذف خدمة النفق وإعداداتها لحساب SYSTEM
+Stop-Service Cloudflared -Force -ErrorAction SilentlyContinue; sc.exe delete Cloudflared
+Remove-Item "C:\Windows\System32\config\systemprofile\.cloudflared" -Recurse -Force -ErrorAction SilentlyContinue
+
+# 3. نسخة أخيرة من البيانات والمفاتيح قبل الحذف
+$bk = "C:\NOCI-reset-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+New-Item -ItemType Directory -Force $bk | Out-Null
+Copy-Item "<span class="dyn-install">C:\NOCI</span>\backend\data", "<span class="dyn-install">C:\NOCI</span>\backend\.keys" $bk -Recurse -Force
+
+# 4. حذف مجلد التثبيت
+Remove-Item "<span class="dyn-install">C:\NOCI</span>" -Recurse -Force</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🎯 النتيجة المتوقعة بعد التصفير:</div>
+          لا مهمة <code>NociAttendanceServer</code> ولا خدمة <code>Cloudflared</code> ولا مجلد <code class="dyn-install">C:\NOCI</code>. البيانات محفوظة في <code>C:\NOCI-reset-backup-*</code>، والنفق باقٍ في حساب Cloudflare وتعيد الخطوة 5 استخدامه.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ أمان البيانات:</div>
+          لحاسبة التجربة فقط. <strong>لا تشغّله على الخادم الرئيسي بعد بدء العمل الفعلي</strong>، ولا تشغّله أبداً بدل التحديث.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 1: BUILD & PACK -->
+  <div class="phase-card machine-dev" data-machine="dev">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">01</div>
+        <div>
+          <div class="phase-title-text">الاختبار والبناء والحزم (Test, Build &amp; Pack)</div>
+          <div class="phase-sub">اختبارات الخادم وFlutter، ثم بناء الويب، ثم حزمة واحدة <code>noci-server-<span class="dyn-version">2.0.0</span>.zip</code> مع ثلاثة حراس</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-dev">💻 جهاز التطوير</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p1"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ تشغيل السكربت المؤتمت بالكامل:</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File "<span class="dyn-repo">D:\Employee NOCI</span>\toolkit\deploy\scripts\01-dev-build-and-pack.ps1"</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>الأوامر اليدوية المفصلة</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code># 1. الاختبارات (يتوقف البناء عند أي فشل)
+cd "<span class="dyn-repo">D:\Employee NOCI</span>\backend"; npm test
+cd "<span class="dyn-repo">D:\Employee NOCI</span>\app"; flutter analyze; flutter test
+
+# 2. بناء الواجهة (لا يُخبز الدومين: الويب على الدومين يستعمل عنوان الصفحة نفسها للـ API)
+flutter build web --release --build-name=<span class="dyn-version">2.0.0</span>
+
+# 3. الحراس
+Test-Path "<span class="dyn-repo">D:\Employee NOCI</span>\app\build\web\canvaskit\canvaskit.wasm"                         # يجب True
+Test-Path "<span class="dyn-repo">D:\Employee NOCI</span>\backend\node_modules\better-sqlite3\prebuilds\win32-x64.node"   # يجب True
+
+# 4. الناتج
+#   <span class="dyn-repo">D:\Employee NOCI</span>\releases\server\noci-server-<span class="dyn-version">2.0.0</span>.zip
+#   <span class="dyn-repo">D:\Employee NOCI</span>\releases\server\NOCI-Deploy\          (أدوات النشر + هذا الدليل)</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🎯 الحراس الإلزامية:</div>
+          • <strong>الحارس 1:</strong> لا <code>data</code> ولا <code>.keys</code> ولا <code>.env</code> ولا <code>uploads</code> ولا <code>logs</code> داخل الحزمة.<br>
+          • <strong>الحارس 2:</strong> <code>index.html</code> و<code>main.dart.js</code> و<code>canvaskit.wasm</code> موجودة (وإلا صفحة بيضاء).<br>
+          • <strong>الحارس 3:</strong> مكتبة SQLite المبنية لويندوز x64 موجودة.<br>
+          • حجم الحزمة أكبر من 5 ميغابايت (حوالي 30 ميغابايت)، والحزمة السابقة تُؤرشف في <code>Old\</code>.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ بعد البناء:</div>
+          انسخ إلى <strong>جذر الفلاشة</strong>: الملف <code>noci-server-<span class="dyn-version">2.0.0</span>.zip</code> والمجلد <code>NOCI-Deploy</code>. هذه الخطوة على جهاز التطوير حصراً، فالخادم لا يحتوي كود المصدر.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2: PREFLIGHT -->
+  <div class="phase-card machine-trial" data-machine="trial">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">02</div>
+        <div>
+          <div class="phase-title-text">الفحص المسبق (Preflight)</div>
+          <div class="phase-sub">قراءة فقط: الحزمة، وNode، والمنفذ 5000، والتثبيت السابق، والمساحة، والاتصال بـ Cloudflare</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-trial">🖥️ الخادم</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p2"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر الفحص (يجد الحزمة في الفلاشة تلقائياً):</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\02-server-preflight.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>المتطلب الوحيد قبل البدء: Node.js</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code># ثبّت Node.js 24 LTS (Windows Installer x64 .msi) من https://nodejs.org لكل المستخدمين، ثم تحقق:
+node -v                                                        # يجب v24.x
+Get-NetTCPConnection -LocalPort 5000 -State Listen -EA SilentlyContinue   # يجب ألا يظهر شيء</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🎯 النتيجة المتوقعة:</div>
+          كل البنود <strong>[ نجح ]</strong>. تحذير "cloudflared غير مثبت" طبيعي، فالخطوة 5 تثبّته.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ لماذا الفحص أولاً:</div>
+          إصدار Node المختلف يجعل مكتبة SQLite لا تُحمَّل فيتوقف الخادم فوراً، والمنفذ المشغول يجعل المشرف يعيد التشغيل بلا نهاية. وكلاهما يظهر متأخراً برسالة مضللة.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 3: INSTALL -->
+  <div class="phase-card machine-trial" data-machine="trial">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">03</div>
+        <div>
+          <div class="phase-title-text">التثبيت وقاعدة البيانات والمفاتيح (Install)</div>
+          <div class="phase-sub">فك الحزمة إلى <code class="dyn-install">C:\NOCI</code>، و<code>.env</code> بـ <code>HOST=127.0.0.1</code>، وحساب <code>admin</code> بكلمة مرور مؤقتة</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-trial">🖥️ الخادم</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p3"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر التثبيت:</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\03-server-install.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>ما يفعله السكربت (للمراجعة)</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code># 1. فك الحزمة
+Expand-Archive "<span class="dyn-drive">E:\</span>noci-server-<span class="dyn-version">2.0.0</span>.zip" "<span class="dyn-install">C:\NOCI</span>" -Force
+
+# 2. ملف البيئة (الوصول عبر النفق فقط)
+@"
+PORT=5000
+HOST=127.0.0.1
+ALLOWED_ORIGINS=https://<span class="dyn-domain">employee.nociraq.com</span>
+"@ | Out-File "<span class="dyn-install">C:\NOCI</span>\backend\.env" -Encoding utf8
+
+# 3. إنشاء القاعدة والمفاتيح وحساب admin بكلمة مرور مؤقتة
+cd "<span class="dyn-install">C:\NOCI</span>\backend"
+$env:NOCI_INITIAL_ADMIN_PASSWORD = "&lt;كلمة مؤقتة عشوائية&gt;"
+node -e "require('./src/core/database')"
+
+# 4. قفل الأذونات
+icacls "<span class="dyn-install">C:\NOCI</span>\backend\.keys" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" /grant:r "Administrators:(OI)(CI)F"
+icacls "<span class="dyn-install">C:\NOCI</span>\backend\.env"  /inheritance:r /grant:r "SYSTEM:F" /grant:r "Administrators:F"</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🔑 أهم شيء في هذه الخطوة:</div>
+          <strong>سجّل كلمة المرور المؤقتة لحساب admin فوراً</strong>، فهي تظهر مرة واحدة فقط. والنظام يطلب تغييرها عند أول دخول.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ توقف آمن:</div>
+          السكربت يرفض العمل إذا وُجد تثبيت سابق، حتى لا تُستبدل بيانات حقيقية. للتحديث استعمل الخطوة 7، وللبدء من الصفر فعلاً الخطوة 0 أولاً.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 4: SERVICE -->
+  <div class="phase-card machine-trial" data-machine="trial">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">04</div>
+        <div>
+          <div class="phase-title-text">تشغيل الخادم الدائم مع الإقلاع (Startup Task)</div>
+          <div class="phase-sub">مهمة مجدولة <code>NociAttendanceServer</code> بحساب SYSTEM تعمل عند الإقلاع قبل تسجيل الدخول، وتُعاد إن توقفت</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-trial">🖥️ الخادم</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p4"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر تسجيل الخدمة:</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\04-server-service.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>الأوامر اليدوية المكافئة</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code>$node = (Get-Command node).Source
+$action = New-ScheduledTaskAction -Execute $node -Argument '"<span class="dyn-install">C:\NOCI</span>\backend\scripts\run-forever.js"' -WorkingDirectory "<span class="dyn-install">C:\NOCI</span>\backend"
+$trigger = New-ScheduledTaskTrigger -AtStartup
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+Register-ScheduledTask -TaskName NociAttendanceServer -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+Start-ScheduledTask NociAttendanceServer
+
+# التحقق
+Invoke-RestMethod http://127.0.0.1:5000/api/system/status</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🎯 النتيجة المتوقعة:</div>
+          الخادم يرد محلياً بـ <code>status: ONLINE</code> والإصدار. السجل في <code class="dyn-install-log">C:\NOCI\backend\logs\server.log</code>، والنسخة الاحتياطية التلقائية الأولى تُنشأ فوراً.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ لماذا ليس اختصار Startup:</div>
+          اختصار مجلد Startup (<code>install-startup-service.bat</code>) لا يعمل إلا بعد تسجيل دخول مستخدم، ويتوقف عند تسجيل خروجه. السكربت يحذف الاختصار القديم إن وجد حتى لا تعمل نسختان على المنفذ نفسه.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 5: TUNNEL -->
+  <div class="phase-card machine-trial" data-machine="trial">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">05</div>
+        <div>
+          <div class="phase-title-text">نفق Cloudflare كخدمة ويندوز (Tunnel)</div>
+          <div class="phase-sub">تثبيت cloudflared الموقّع، وإنشاء النفق، وربط <code class="dyn-domain">employee.nociraq.com</code> بالمنفذ 5000، مع علاج العطل 7</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-trial">🖥️ الخادم</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p5"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر إعداد النفق (يفتح المتصفح أول مرة لتفويض الدومين):</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\05-server-tunnel.ps1 -Domain "<span class="dyn-domain">employee.nociraq.com</span>"</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>الأوامر اليدوية المفصلة</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code># 1. التثبيت والتفويض
+winget install --id Cloudflare.cloudflared --exact
+cloudflared tunnel login                         # اختر nociraq.com ثم Authorize
+cloudflared tunnel create noci-attendance-tunnel
+cloudflared tunnel route dns --overwrite-dns noci-attendance-tunnel <span class="dyn-domain">employee.nociraq.com</span>
+
+# 2. إعداد خاص بحساب SYSTEM (الخدمة لا ترى مجلد المستخدم)
+$sys = "C:\Windows\System32\config\systemprofile\.cloudflared"
+# انسخ إليه &lt;TUNNEL-ID&gt;.json و cert.pem من $env:USERPROFILE\.cloudflared، ثم config.yml:
+#   tunnel: &lt;TUNNEL-ID&gt;
+#   credentials-file: C:\Windows\System32\config\systemprofile\.cloudflared\&lt;TUNNEL-ID&gt;.json
+#   ingress:
+#     - hostname: <span class="dyn-domain">employee.nociraq.com</span>
+#       service: http://localhost:5000
+#     - service: http_status:404
+
+# 3. الخدمة مع علاج العطل 7
+cloudflared service install
+$exe = (Get-Command cloudflared).Source
+Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Cloudflared" -Name ImagePath -Type ExpandString `
+  -Value "`"$exe`" --config `"$sys\config.yml`" --no-autoupdate tunnel run"
+Restart-Service Cloudflared</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🎯 النتيجة المتوقعة:</div>
+          <code>https://<span class="dyn-domain">employee.nociraq.com</span>/api/system/status</code> يرد. وفي لوحة Cloudflare: Networking ← Tunnels ← النفق <strong>Healthy</strong>. انتشار DNS أول مرة قد يأخذ دقائق.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ العطل 7 (من تجربة DMS):</div>
+          <code>cloudflared service install</code> يسجّل الخدمة دون <code>--config</code>، فتبدأ ثم تخرج صامتة لأن حساب SYSTEM لا يجد الإعداد. لذلك يُنسخ الإعداد لمجلد SYSTEM ويُضبط <code>ImagePath</code> بـ <code>--config</code> و<code>tunnel run</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 6: VERIFY -->
+  <div class="phase-card machine-trial" data-machine="trial">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">06</div>
+        <div>
+          <div class="phase-title-text">الفحص الحاسم الشامل (Final Verification)</div>
+          <div class="phase-sub">7 بنود: المهمة، والخادم المحلي، و.env، وخدمة النفق ومسارها، والنسخ التلقائية، والـ API والواجهة عبر الدومين</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-update">🎯 فحص شامل</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p6"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر الفحص:</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\06-server-verify.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>فحوصات يدوية سريعة</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code>Get-ScheduledTask NociAttendanceServer | Select TaskName, State
+Get-Service Cloudflared | Select Name, Status, StartType
+sc.exe qc Cloudflared                                     # يجب أن يحتوي --config و tunnel run
+Invoke-RestMethod http://127.0.0.1:5000/api/system/status
+Invoke-RestMethod https://<span class="dyn-domain">employee.nociraq.com</span>/api/system/status</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🏁 الاختبار الحاسم:</div>
+          1. افتح <code>https://<span class="dyn-domain">employee.nociraq.com</span></code> من الهاتف على <strong>بيانات الجوال</strong>، لا من شبكة الخادم.<br>
+          2. ادخل بـ <code>admin</code> وكلمة المرور المؤقتة، ثم غيّرها.<br>
+          3. استورد ملف الموظفين من شاشة الموظفين.<br>
+          4. أعد تشغيل الخادم دون تسجيل دخول، وتأكد أن الدومين يعمل.
+        </div>
+        <div class="note-box" style="margin-top:0">
+          <div class="note-title">📱 تطبيقا الويندوز والآيفون:</div>
+          من شاشة الدخول ← <strong>"ضبط عنوان الخادم (API)"</strong> ← <code>https://<span class="dyn-domain">employee.nociraq.com</span>/api</code>. أما الويب على الدومين فيتصل تلقائياً.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 7: UPDATE -->
+  <div class="phase-card machine-update" data-machine="update">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">07</div>
+        <div>
+          <div class="phase-title-text">تحديث نسخة مرفوعة بأمان (In-Place Update)</div>
+          <div class="phase-sub">ترقية الإصدار دون مسح أي بيانات، مع لقطة تراجع للكود والقاعدة، وتراجع تلقائي عند الفشل</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-update">🚀 تحديث</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p7"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر التحديث (بعد الخطوة 1 ونقل الحزمة الجديدة للفلاشة):</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\07-server-update-release.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>ما يفعله السكربت بالترتيب</span>
+          <button class="btn-copy" data-copy-pre>نسخ النص</button>
+        </div>
+        <pre><code>1. يفك الحزمة في مجلد مؤقت أولاً (حزمة تالفة تُكتشف قبل إيقاف أي شيء)
+2. يوقف الخادم ويعطّل المهمة مؤقتاً
+3. يحفظ لقطة في <span class="dyn-install">C:\NOCI</span>\releases\pre-update-&lt;الإصدار&gt;-&lt;التاريخ&gt;\
+     backend (الكود) + app\build\web + نسخة من attendance.db
+4. يستبدل: backend\src  scripts  vendor  node_modules  package*.json  و app\build\web
+5. يشغّل الخادم (ترحيلات القاعدة تُطبَّق تلقائياً) ويتحقق أن الإصدار = إصدار الحزمة
+6. عند أي فشل: يعيد الكود والقاعدة من اللقطة ويشغّل النسخة السابقة
+7. يفحص الدومين، ويُبقي آخر 5 لقطات فقط</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🛡️ لا يمسه التحديث أبداً:</div>
+          <code>backend\data</code> (القاعدة والنسخ)، و<code>backend\.keys</code> (مفاتيح التشفير)، و<code>backend\uploads</code> (الصور والشعار)، و<code>backend\logs</code>، و<code>backend\.env</code>.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ تنبيه ذهبي:</div>
+          عند التحديث <strong>لا تشغّل أبداً الخطوة 0 ولا 3</strong>. الخطوة 7 وحدها تتكفل بكل شيء وتحافظ على البيانات والمفاتيح والنفق. بعد التحديث: Ctrl+F5 في المتصفح.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 8: CLOUDFLARED UPDATE -->
+  <div class="phase-card machine-update" data-machine="update">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">08</div>
+        <div>
+          <div class="phase-title-text">تحديث cloudflared بأمان (Tunnel Update)</div>
+          <div class="phase-sub">عند كل تنبيه أمني من Cloudflare: الخدمة تعمل بـ <code>--no-autoupdate</code> فلا تتحدث وحدها</div>
+        </div>
+      </div>
+      <div class="phase-badges">
+        <span class="badge badge-update">🔐 النفق</span>
+        <label class="chk-done"><input type="checkbox" class="step-chk" data-key="p8"> اكتملت</label>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="runner-box">
+        <div class="runner-details">
+          <div class="runner-title">⚡ أمر التحديث:</div>
+          <div class="runner-cmd">powershell -ExecutionPolicy Bypass -File <span class="dyn-drive">E:\</span>NOCI-Deploy\scripts\08-server-cloudflared-update.ps1</div>
+        </div>
+        <button class="btn btn-primary" data-copy-runner>نسخ أمر السكربت</button>
+      </div>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>فحص النسخة الحالية يدوياً</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code>(Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Cloudflared").ImagePath
+cloudflared --version                 # الحد الأدنى الآمن: 2026.10.2</code></pre>
+      </div>
+
+      <div class="grid-2">
+        <div class="guard-box">
+          <div class="guard-title">🛡️ الضمانات:</div>
+          • يرفض الملف إن لم يكن موقّعاً من Cloudflare.<br>
+          • يعيد <code>ImagePath</code> حرفياً بعد التثبيت (العطل 7).<br>
+          • يتراجع للنسخة السابقة إن لم ترد الخدمة أو الدومين خلال 60 ثانية.
+        </div>
+        <div class="error-box">
+          <div class="error-title">⚠️ الانقطاع:</div>
+          النظام ينقطع ثوانيَ معدودة أثناء إعادة تشغيل النفق. نفّذه خارج ساعات الذروة.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REFERENCE: LOCATIONS -->
+  <div class="phase-card machine-info collapsed" data-machine="info">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">📁</div>
+        <div>
+          <div class="phase-title-text">أين كل شيء على الخادم، وأوامر مفيدة</div>
+          <div class="phase-sub">المسارات المهمة وأوامر إعادة التشغيل ومتابعة السجل</div>
+        </div>
+      </div>
+      <div class="phase-badges"><span class="badge badge-info">🧭 مرجع</span></div>
+    </div>
+    <div class="phase-body">
+      <table class="info">
+        <tr><th>المسار</th><th>المحتوى</th></tr>
+        <tr><td><code><span class="dyn-install">C:\NOCI</span>\backend\data\attendance.db</code></td><td>قاعدة البيانات</td></tr>
+        <tr><td><code><span class="dyn-install">C:\NOCI</span>\backend\data\backups\</code></td><td>نسخ تلقائية يومية (آخر 30) ونسخ يدوية</td></tr>
+        <tr><td><code><span class="dyn-install">C:\NOCI</span>\backend\.keys\secrets.json</code></td><td>مفاتيح الجلسات والتشفير. <strong>انسخها مرة واحدة لمكان آمن خارج الحاسبة.</strong></td></tr>
+        <tr><td><code><span class="dyn-install">C:\NOCI</span>\backend\.env</code></td><td>المنفذ و<code>HOST</code> والأصول المسموحة</td></tr>
+        <tr><td><code><span class="dyn-install">C:\NOCI</span>\backend\logs\server.log</code></td><td>سجل الخادم (يُدوَّر عند 5 ميغابايت)</td></tr>
+        <tr><td><code><span class="dyn-install">C:\NOCI</span>\releases\</code></td><td>لقطات التراجع (آخر 5) ونسخ cloudflared السابقة</td></tr>
+        <tr><td><code>C:\Windows\System32\config\systemprofile\.cloudflared\config.yml</code></td><td>إعداد النفق الذي تقرؤه الخدمة</td></tr>
+      </table>
+
+      <div class="cmd-card">
+        <div class="cmd-header">
+          <span>أوامر مفيدة (PowerShell كمسؤول)</span>
+          <button class="btn-copy" data-copy-pre>نسخ الأوامر</button>
+        </div>
+        <pre><code># إعادة تشغيل الخادم
+Stop-ScheduledTask NociAttendanceServer; Start-ScheduledTask NociAttendanceServer
+
+# متابعة السجل مباشرة
+Get-Content "<span class="dyn-install">C:\NOCI</span>\backend\logs\server.log" -Tail 30 -Wait
+
+# إعادة تشغيل النفق
+Restart-Service Cloudflared</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- REFERENCE: TROUBLESHOOTING -->
+  <div class="phase-card machine-info collapsed" data-machine="info">
+    <div class="phase-header">
+      <div class="phase-header-info">
+        <div class="phase-num">🩹</div>
+        <div>
+          <div class="phase-title-text">الأعطال المعروفة وحلولها</div>
+          <div class="phase-sub">من تجربة DMS ومن طبيعة نظامنا</div>
+        </div>
+      </div>
+      <div class="phase-badges"><span class="badge badge-info">🧭 مرجع</span></div>
+    </div>
+    <div class="phase-body">
+      <table class="info">
+        <tr><th>العَرَض</th><th>السبب</th><th>الحل</th></tr>
+        <tr><td>خدمة Cloudflared تبدأ ثم تتوقف فوراً</td><td>العطل 7: الخدمة مسجلة بلا <code>--config</code></td><td>الخطوة 5، وبعد أي تحديث للنفق الخطوة 8</td></tr>
+        <tr><td>الدومين يعطي خطأ 1033</td><td>النفق متوقف أو ملف اعتماده من حاسبة أخرى</td><td>الخطوة 5 تكتشفه وتعيد إنشاء الاعتماد</td></tr>
+        <tr><td>الدومين يعطي خطأ 502</td><td>النفق يعمل والخادم متوقف</td><td>الخطوة 6، ثم سجل الخادم</td></tr>
+        <tr><td>في السجل <code>NODE_MODULE_VERSION</code></td><td>إصدار Node مختلف عن جهاز البناء</td><td>ثبّت نفس الإصدار الرئيسي (24)</td></tr>
+        <tr><td>المنفذ 5000 مشغول</td><td>نسخة ثانية (<code>تشغيل النظام.bat</code> أو اختصار Startup قديم)</td><td>أغلقها؛ الخطوة 4 تحذف الاختصار القديم</td></tr>
+        <tr><td>صفحة بيضاء</td><td>ملفات الواجهة ناقصة</td><td>أعد الخطوة 1 (الحارس 2) ثم الخطوة 7</td></tr>
+        <tr><td>واجهة قديمة بعد التحديث</td><td>ذاكرة المتصفح</td><td>Ctrl+F5 أو أغلق التبويب وافتحه</td></tr>
+        <tr><td>"انتهت صلاحية الجلسة" بعد التحديث</td><td>سلوك مقصود</td><td>سجّل الدخول من جديد</td></tr>
+        <tr><td>كلمات المرور لا تُكشف بعد استعادة نسخة</td><td>النسخة من تثبيت بمفاتيح مختلفة</td><td>استعد معها ملف <code>.keys\secrets.json</code> الأصلي</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const STORE_KEY = 'noci-deploy-wizard';
+
+  function getVal(id) {
+    return document.getElementById(id).value.trim();
+  }
+
+  function copyText(text) {
+    const done = () => alert("✔ تم النسخ إلى الحافظة:\n" + text);
+    if (navigator.clipboard && window.isSecureContext !== false) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  // Hint: احتياطي للنسخ عند فتح الملف محلياً (file://) في متصفح يمنع الحافظة
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (_) { prompt('انسخ يدوياً:', text); }
+    ta.remove();
+  }
+
+  function withSlash(p) {
+    return p.endsWith('\\') ? p : p + '\\';
+  }
+
+  function updateVariables() {
+    const domain = getVal('cfgDomain') || 'employee.nociraq.com';
+    const drive = withSlash(getVal('cfgDrive') || 'E:\\');
+    const install = (getVal('cfgInstall') || 'C:\\NOCI').replace(/\\$/, '');
+    const repo = (getVal('cfgRepo') || 'D:\\Employee NOCI').replace(/\\$/, '');
+    const version = getVal('cfgVersion') || '2.0.0';
+
+    document.querySelectorAll('.dyn-domain').forEach(el => el.textContent = domain);
+    document.querySelectorAll('.dyn-drive').forEach(el => el.textContent = drive);
+    document.querySelectorAll('.dyn-install').forEach(el => el.textContent = install);
+    document.querySelectorAll('.dyn-install-log').forEach(el => el.textContent = install + '\\backend\\logs\\server.log');
+    document.querySelectorAll('.dyn-repo').forEach(el => el.textContent = repo);
+    document.querySelectorAll('.dyn-version').forEach(el => el.textContent = version);
+    saveState();
+  }
+
+  const cfgIds = ['cfgDomain', 'cfgDrive', 'cfgInstall', 'cfgRepo', 'cfgVersion'];
+  cfgIds.forEach(id => document.getElementById(id).addEventListener('input', updateVariables));
+
+  // أزرار النسخ: أمر السكربت من سطر runner-cmd، والأوامر من كتلة pre
+  document.querySelectorAll('[data-copy-runner]').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.closest('.runner-box').querySelector('.runner-cmd').innerText.trim()));
+  });
+  document.querySelectorAll('[data-copy-pre]').forEach(btn => {
+    btn.addEventListener('click', () => copyText(btn.closest('.cmd-card').querySelector('pre').innerText));
+  });
+
+  const filterBtns = document.querySelectorAll('.filter-btn');
+  const cards = document.querySelectorAll('.phase-card');
+
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const filter = btn.dataset.filter;
+      cards.forEach(card => {
+        card.style.display = (filter === 'all' || card.dataset.machine === filter) ? 'block' : 'none';
+      });
+    });
+  });
+
+  const chks = document.querySelectorAll('.step-chk');
+  const progBar = document.getElementById('progBar');
+  const progText = document.getElementById('progText');
+
+  function updateProgress() {
+    let completed = 0;
+    chks.forEach(chk => {
+      if (chk.checked) completed++;
+      chk.closest('.chk-done').classList.toggle('checked', chk.checked);
+    });
+    const percent = Math.round((completed / chks.length) * 100);
+    progBar.style.width = percent + '%';
+    progText.textContent = `${completed} / ${chks.length}`;
+  }
+
+  // Hint: حفظ علامات الإنجاز والإعدادات في المتصفح فقط (اختياري؛ الصفحة تعمل بدونه)
+  function saveState() {
+    try {
+      const state = { checks: {}, cfg: {}, light: document.documentElement.classList.contains('light') };
+      chks.forEach(c => state.checks[c.dataset.key] = c.checked);
+      cfgIds.forEach(id => state.cfg[id] = document.getElementById(id).value);
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    } catch (_) {}
+  }
+
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+      if (!state) return;
+      chks.forEach(c => c.checked = !!(state.checks || {})[c.dataset.key]);
+      cfgIds.forEach(id => { if (state.cfg && state.cfg[id]) document.getElementById(id).value = state.cfg[id]; });
+      if (state.light) document.documentElement.classList.add('light');
+    } catch (_) {}
+  }
+
+  chks.forEach(chk => chk.addEventListener('change', () => { updateProgress(); saveState(); }));
+
+  document.getElementById('resetChecks').addEventListener('click', () => {
+    chks.forEach(c => c.checked = false);
+    updateProgress();
+    saveState();
+  });
+
+  document.querySelectorAll('.phase-header').forEach(hdr => {
+    hdr.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.closest('.chk-done')) return;
+      hdr.closest('.phase-card').classList.toggle('collapsed');
+    });
+  });
+
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    document.documentElement.classList.toggle('light');
+    saveState();
+  });
+
+  loadState();
+  updateVariables();
+  updateProgress();
+</script>
+
+</body>
+</html>

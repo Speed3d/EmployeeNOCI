@@ -35,12 +35,14 @@ do {
         Write-Host "  [$k] $($steps[$k][1])  ($($steps[$k][0]))" -ForegroundColor $steps[$k][2]
     }
     Write-Host "------------------------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  [H] 🌐 فتح الدليل التفاعلي في المتصفح (NOCI_Deploy_Wizard.html)" -ForegroundColor Magenta
     Write-Host "  [Q] 🚪 خروج" -ForegroundColor Gray
     Write-Host "========================================================================" -ForegroundColor Cyan
     Write-Host "  تثبيت أول مرة: 2 ⇐ 3 ⇐ 4 ⇐ 5 ⇐ 6      تحديث إصدار: 7 فقط" -ForegroundColor DarkCyan
 
     $choice = (Read-Host "اختر رقم الخطوة").Trim().ToUpper()
     if ($choice -eq 'Q') { break }
+    if ($choice -eq 'H') { Start-Process (Join-Path $PSScriptRoot "NOCI_Deploy_Wizard.html"); continue }
     if ($steps.Contains($choice)) {
         powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $scripts $steps[$choice][0])
     } else {

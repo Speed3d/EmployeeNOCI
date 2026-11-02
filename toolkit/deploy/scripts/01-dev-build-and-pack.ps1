@@ -138,6 +138,8 @@ if ($mb -lt 5) { Write-Host "🔴 حجم الحزمة $mb ميغابايت فق�
 $kit = Join-Path $OutputDir "NOCI-Deploy"
 if (Test-Path $kit) { Remove-Item $kit -Recurse -Force }
 Copy-Item "$RepoRoot\toolkit\deploy" $kit -Recurse -Force
+# والدليل التفاعلي بجانب الحزمة أيضاً، لفتحه مباشرة من مجلد الإصدار
+Copy-Item "$RepoRoot\toolkit\deploy\NOCI_Deploy_Wizard.html" $OutputDir -Force
 
 Write-Host "`n==========================================================" -ForegroundColor Green
 Write-Host "  ✅ تم البناء والحزم: $zip ($mb ميغابايت)" -ForegroundColor Green
